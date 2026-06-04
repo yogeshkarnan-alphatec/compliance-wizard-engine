@@ -1,0 +1,75 @@
+{
+  "_comment": "Seed data for certification_bodies + certification_body_aliases tables. Loaded by scripts/seed_reference_data.py. The DB is the runtime source of truth; the Review UI can add bodies/aliases live. 'identifier' is the EU notified-body number where applicable. Alias matching in the Mapping agent is case-insensitive and accent-insensitive, but we list common spellings explicitly so resolution is auditable.",
+  "bodies": [
+    {
+      "canonical_name": "TÜV SÜD",
+      "body_type": "notified",
+      "jurisdiction": "DE",
+      "identifier": "0123",
+      "aliases": ["TUV SUD", "TUEV SUED", "TÜV Süd", "TUV-SUD", "TÜV SÜD Product Service"]
+    },
+    {
+      "canonical_name": "TÜV Rheinland",
+      "body_type": "notified",
+      "jurisdiction": "DE",
+      "identifier": "0197",
+      "aliases": ["TUV Rheinland", "TUEV Rheinland", "TÜV Rheinland LGA", "TUV-Rheinland"]
+    },
+    {
+      "canonical_name": "TÜV NORD",
+      "body_type": "notified",
+      "jurisdiction": "DE",
+      "identifier": "0044",
+      "aliases": ["TUV NORD", "TUEV NORD", "TÜV Nord", "TUV-NORD"]
+    },
+    {
+      "canonical_name": "Dekra",
+      "body_type": "notified",
+      "jurisdiction": "DE",
+      "identifier": "0158",
+      "aliases": ["DEKRA", "DEKRA Certification", "DEKRA Testing and Certification"]
+    },
+    {
+      "canonical_name": "Bureau Veritas",
+      "body_type": "notified",
+      "jurisdiction": "FR",
+      "identifier": "0062",
+      "aliases": ["BUREAU VERITAS", "Bureau Veritas SA", "BV"]
+    },
+    {
+      "canonical_name": "SGS",
+      "body_type": "notified",
+      "jurisdiction": "CH",
+      "identifier": "0598",
+      "aliases": ["SGS SA", "SGS Group", "Société Générale de Surveillance"]
+    },
+    {
+      "canonical_name": "Intertek",
+      "body_type": "notified",
+      "jurisdiction": "GB",
+      "identifier": "0359",
+      "aliases": ["INTERTEK", "Intertek Testing Services", "ITS"]
+    },
+    {
+      "canonical_name": "BSI",
+      "body_type": "notified",
+      "jurisdiction": "GB",
+      "identifier": "0086",
+      "aliases": ["British Standards Institution", "BSI Group", "B.S.I."]
+    },
+    {
+      "canonical_name": "UL",
+      "body_type": "certified",
+      "jurisdiction": "US",
+      "identifier": null,
+      "aliases": ["Underwriters Laboratories", "UL LLC", "U.L."]
+    },
+    {
+      "canonical_name": "Eurofins",
+      "body_type": "notified",
+      "jurisdiction": "LU",
+      "identifier": "2812",
+      "aliases": ["EUROFINS", "Eurofins Scientific", "Eurofins Product Testing"]
+    }
+  ]
+}

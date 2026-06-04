@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Compliance Wizard{% endblock %}
+{% block content %}
+<h1>Compliance Wizard</h1>
+<p class="muted">Enter an HS code and product attributes (JSON) to see which directives apply.</p>
+
+<form class="filters" method="post" action="/wizard">
+  <div><label>HS code<br><input name="hs_code" value="{{ hs_code }}" placeholder="8501.10"></label></div>
+  <div style="flex:1"><label>Product attributes (JSON)<br>
+    <textarea name="product_attributes" rows="3" style="width:100%">{{ attrs_json }}</textarea></label></div>
+  <button type="submit">Query</button>
+</form>
+
+{% if error %}<p class="badge invalid_hs">{{ error }}</p>{% endif %}
+
+{% if results is not none %}
+<h3>Results ({{ results|length }})</h3>
+<table>
+  <thead><tr><th>Status</th><th>Regulation</th><th>Jur.</th><th>Conf.</th><th>Missing attrs</th><th>Evidence</th><th>Notes</th></tr></thead>
+  <tbody>
+    {% for r in results %}
+    <tr>
+      <td><span class="badge {{ r.applicability_status }}">{{ r.applicability_status }}</span></td>
+      <td>{{ r.regulation_title }}</td>
+      <td>{{ r.jurisdiction }}</td>
+      <td>{{ "%.2f"|format(r.confidence) }}</td>
+      <td>{{ r.missing_attributes|join(", ") }}</td>
+      <td><pre>{{ r.evidence_references|join("\n") }}</pre></td>
+      <td>{{ r.relationship_notes or "" }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">No candidate regulations for this HS code.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

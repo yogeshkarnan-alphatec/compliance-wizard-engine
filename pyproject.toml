@@ -1,0 +1,47 @@
+[project]
+name = "compliance-wizard-engine"
+version = "0.1.0"
+description = "Regulation extraction & applicability engine powering the Compliance Wizard"
+requires-python = ">=3.11"
+dependencies = [
+    "sqlalchemy>=2.0,<2.1",
+    "alembic>=1.13",
+    "psycopg[binary]>=3.1",      # psycopg3 driver; URL uses postgresql+psycopg://
+    "pydantic>=2.6,<3.0",
+    "pymupdf>=1.24",             # PDF parsing (fitz) — layout + page coords
+    "openai>=1.30",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",   # FastAPI form/file uploads in Review UI
+    "httpx>=0.27",               # EUR-Lex / CELLAR REST calls
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.4",
+]
+
+# Flat layout: top-level modules (config, llm_client, pipeline, worker) live at
+# the repo root alongside the package dirs (db/, schemas/, agents/, ...).
+# We run from the repo root rather than installing, so set pythonpath for tests.
+[tool.setuptools]
+py-modules = ["config", "llm_client", "pipeline", "worker"]
+
+[tool.setuptools.packages.find]
+include = ["adapters*", "agents*", "engine*", "db*", "ui*", "schemas*", "scripts*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

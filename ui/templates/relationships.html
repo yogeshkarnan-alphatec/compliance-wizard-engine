@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Relationships{% endblock %}
+{% block content %}
+<h1>Relationships — {{ title }}</h1>
+<p><a href="/review">← back to queue</a></p>
+
+<h3>Edges ({{ edges|length }})</h3>
+<table>
+  <thead><tr><th>Type</th><th>Target</th><th>Conf.</th><th>Source</th><th>Action</th></tr></thead>
+  <tbody>
+    {% for e in edges %}
+    <tr>
+      <td>{{ e.relation_type }}</td>
+      <td>{{ e.target }}</td>
+      <td>{{ "%.2f"|format(e.confidence) }}</td>
+      <td>{{ e.source }}</td>
+      <td>
+        <form class="inline" method="post" action="/review/relationships/{{ regulation_id }}/edge/{{ e.id }}">
+          <select name="relation_type">
+            {% for rt in relation_types %}<option value="{{ rt }}" {% if rt==e.relation_type %}selected{% endif %}>{{ rt }}</option>{% endfor %}
+          </select>
+          <button name="action" value="correct" type="submit" class="secondary">Correct</button>
+          <button name="action" value="delete" type="submit" class="danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">No relationships recorded.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h3>Amendment / supersession chain</h3>
+<table>
+  <thead><tr><th>Depth</th><th>Relation</th><th>Source id</th><th>Title</th></tr></thead>
+  <tbody>
+    {% for c in chain %}
+    <tr><td>{{ c.depth }}</td><td>{{ c.relation_type }}</td><td>{{ c.source_id }}</td><td>{{ c.title or "" }}</td></tr>
+    {% else %}
+    <tr><td colspan="4" class="muted">No amendment/supersession chain.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

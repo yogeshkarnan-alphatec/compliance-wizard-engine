@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Field Detail{% endblock %}
+{% block content %}
+<h1>{{ regulation }} — <span class="muted">{{ field_name }}</span></h1>
+<p><a href="/review">← back to queue</a> &nbsp; status: <strong>{{ review_status }}</strong>
+   &nbsp; <span class="badge {{ reason }}">{{ reason }}</span></p>
+
+<div class="two-col">
+  <div class="panel">
+    <h3>Source (PDF segment)</h3>
+    <pre>{{ snippet }}</pre>
+  </div>
+  <div class="panel">
+    <h3>Extracted &amp; mapped</h3>
+    <table>
+      <tr><th>Raw value</th><td>{{ raw_value }}</td></tr>
+      <tr><th>Mapped value</th><td>{{ mapped_value }}</td></tr>
+      <tr><th>Reference</th><td>{{ reference }}</td></tr>
+      <tr><th>Confidence</th><td>{{ "%.2f"|format(confidence) }}</td></tr>
+    </table>
+
+    <h3>Action</h3>
+    <form method="post" action="/review/field/{{ field_id }}">
+      <p><label>Corrected value (for Edit)<br>
+        <input name="value" value="{{ mapped_value }}" style="width:100%"></label></p>
+      <p><label>Reviewer note<br>
+        <textarea name="note" rows="2" style="width:100%"></textarea></label></p>
+      <input type="hidden" name="reviewer" value="reviewer">
+      <button name="action" value="approve" type="submit">Approve</button>
+      <button name="action" value="edit" type="submit" class="secondary">Save edit</button>
+      <button name="action" value="reject" type="submit" class="danger">Reject</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,42 @@
+{
+  "_comment": "Controlled vocabulary of technical parameters the applicability engine understands. Loaded by scripts/seed_reference_data.py into the product_attributes table (DB = source of truth; the Review UI extends it live as new directive types are processed). Treat this as a first-class, living artefact. type ∈ {range, enum, boolean}. 'range' attrs carry a unit; 'enum' attrs carry values; 'boolean' attrs carry neither. Naming convention: snake_case, unit suffix on range attrs (e.g. _vac, _bar, _kg) so the same physical quantity in different units stays distinct.",
+  "attributes": {
+    "rated_voltage_vac": {"unit": "V AC", "type": "range"},
+    "rated_voltage_vdc": {"unit": "V DC", "type": "range"},
+    "rated_current_a": {"unit": "A", "type": "range"},
+    "rated_power_w": {"unit": "W", "type": "range"},
+    "frequency_hz": {"unit": "Hz", "type": "range"},
+    "operating_pressure_bar": {"unit": "bar", "type": "range"},
+    "volume_l": {"unit": "L", "type": "range"},
+    "mass_kg": {"unit": "kg", "type": "range"},
+    "length_mm": {"unit": "mm", "type": "range"},
+    "sound_power_db": {"unit": "dB(A)", "type": "range"},
+    "operating_temperature_c": {"unit": "°C", "type": "range"},
+    "radio_frequency_mhz": {"unit": "MHz", "type": "range"},
+    "ip_rating": {"type": "range", "unit": "IP"},
+    "intended_use": {
+      "type": "enum",
+      "values": ["professional", "consumer", "industrial", "medical", "domestic", "military", "marine", "automotive"]
+    },
+    "product_category": {
+      "type": "enum",
+      "values": ["machinery", "electrical_equipment", "pressure_equipment", "ppe", "toy", "radio_equipment", "measuring_instrument", "medical_device", "construction_product", "atex_equipment"]
+    },
+    "user_age_group": {
+      "type": "enum",
+      "values": ["children_under_3", "children_under_14", "adult", "all_ages"]
+    },
+    "atex_zone": {
+      "type": "enum",
+      "values": ["zone_0", "zone_1", "zone_2", "zone_20", "zone_21", "zone_22", "non_ex"]
+    },
+    "has_radio_module": {"type": "boolean"},
+    "is_wireless": {"type": "boolean"},
+    "contains_battery": {"type": "boolean"},
+    "is_explosive_atmosphere": {"type": "boolean"},
+    "has_safety_function": {"type": "boolean"},
+    "is_pressure_vessel": {"type": "boolean"},
+    "intended_outdoor_use": {"type": "boolean"},
+    "contains_rohs_substances": {"type": "boolean"}
+  }
+}

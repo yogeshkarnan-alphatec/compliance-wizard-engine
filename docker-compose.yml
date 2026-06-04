@@ -1,0 +1,22 @@
+# Postgres only — the spec forbids a second datastore (no Redis/Kafka/Celery).
+# The queue, audit log, and graph edges all live in this one database.
+services:
+  postgres:
+    image: postgres:16
+    container_name: compliance_wizard_pg
+    environment:
+      POSTGRES_USER: compliance
+      POSTGRES_PASSWORD: compliance
+      POSTGRES_DB: compliance_wizard
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U compliance -d compliance_wizard"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

@@ -1,0 +1,17 @@
+hs_code,description,level,parent_code,source
+8501,Electric motors and generators (excluding generating sets),4,85,WCO
+850110,"Motors of an output not exceeding 37.5 W",6,8501,WCO
+85011010,"Synchronous motors of an output not exceeding 18 W",8,850110,EU_CN
+850120,"Universal AC/DC motors of an output exceeding 37.5 W",6,8501,WCO
+850131,"Other DC motors; DC generators, of an output not exceeding 750 W",6,8501,WCO
+8517,"Telephone sets and other apparatus for transmission/reception of voice, images or data",4,85,WCO
+851712,"Telephones for cellular networks or for other wireless networks",6,8517,WCO
+851762,"Machines for the reception, conversion and transmission of voice, images or data",6,8517,WCO
+8413,"Pumps for liquids, whether or not fitted with a measuring device",4,84,WCO
+841350,"Other reciprocating positive displacement pumps",6,8413,WCO
+8419,"Machinery for the treatment of materials by a process involving a change of temperature",4,84,WCO
+841911,"Instantaneous gas water heaters",6,8419,WCO
+9503,"Tricycles, scooters, pedal cars and similar wheeled toys; dolls; other toys",4,95,WCO
+950300,"Toys (tricycles, dolls, puzzles, reduced-scale models and similar)",6,9503,WCO
+6506,"Other headgear, whether or not lined or trimmed",4,65,WCO
+650610,"Safety headgear (helmets)",6,6506,WCO

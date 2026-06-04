@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}HS / Applicability Review{% endblock %}
+{% block content %}
+<h1>HS / Applicability Review <span class="muted">({{ rows|length }} pending)</span></h1>
+
+<table>
+  <thead>
+    <tr><th>Regulation</th><th>HS code</th><th>Match</th><th>Conf.</th><th>Candidate matches</th><th>Action</th></tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.regulation }}</td>
+      <td>{{ r.hs_code }}</td>
+      <td>{{ r.match_type }}</td>
+      <td>{{ "%.2f"|format(r.confidence) }}</td>
+      <td>
+        <form method="post" action="/review/hs-mapping/{{ r.id }}">
+          <select name="chosen_code">
+            {% for c in r.candidates %}
+            <option value="{{ c.code }}">{{ c.code }} — {{ c.desc[:50] }}</option>
+            {% else %}
+            <option value="">(no candidates in nomenclature)</option>
+            {% endfor %}
+          </select>
+          <input type="hidden" name="reviewer" value="reviewer">
+          <button name="action" value="select" type="submit">Use selected</button>
+      </td>
+      <td>
+          <button name="action" value="approve" type="submit" class="secondary">Approve as-is</button>
+          <button name="action" value="reject" type="submit" class="danger">Unresolvable</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">No pending HS mappings.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
