@@ -18,7 +18,7 @@ def test_full_pipeline_then_wizard(monkeypatch, mock_llm, sample_pdf, cleanup_re
             {"parameter_name": "rated voltage vdc", "operator": "<", "value": "75", "unit": "V DC",
              "condition_type": "exclusion", "reference": "Art.1", "confidence": 0.9, "raw_text": "below 75 V DC"}
         ],
-        "regulation_mentions": ["Directive 2014/35/EU"],
+        "regulation_mentions": ["Directive 9999/1/EU"],  # fictional id — see cleanup note below
     })
     import agents.fetch_agent as fa
     monkeypatch.setattr(
@@ -35,7 +35,9 @@ def test_full_pipeline_then_wizard(monkeypatch, mock_llm, sample_pdf, cleanup_re
     job = UploadAdapter().fetch(pdf)
     cleanup_jobs.append(job.id)
     source_id = f"UPLOAD:{job.id}"
-    cleanup_regs.extend([source_id, "32014L0035"])
+    # "39999L0001" is the fictional stub from the mention above — never a real CELEX, so
+    # teardown can't delete genuine ingested data (the suite shares the real Postgres).
+    cleanup_regs.extend([source_id, "39999L0001"])
 
     run_pipeline(job.id)
 

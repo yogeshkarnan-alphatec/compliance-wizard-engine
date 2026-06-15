@@ -35,9 +35,10 @@ _CHAIN_TYPES = ("amends", "amended_by", "supersedes", "superseded_by")
 def normalize_identifier(mention: str) -> str:
     """Best-effort CELEX normalization of a cited regulation string.
 
-    "Directive 2014/35/EU"   -> "32014L0035"
-    "Regulation (EU) 2016/425" -> "32016R0425"
-    "Directive 89/686/EEC"   -> "31989L0686"
+    "Directive 2014/35/EU"        -> "32014L0035"  (year/number)
+    "Regulation (EC) No 765/2008" -> "32008R0765"  (number/year — pre-2015 reg style)
+    "Regulation (EU) 2016/425"    -> "32016R0425"
+    "Directive 89/686/EEC"        -> "31989L0686"
     Already-CELEX tokens pass through. Unparseable mentions return a stable
     slug so they can still anchor a stub node.
     """
@@ -45,9 +46,14 @@ def normalize_identifier(mention: str) -> str:
     if re.fullmatch(r"3\d{4}[A-Z]\d{4}", s):  # already a CELEX id
         return s
 
-    m = re.search(r"(regulation|directive|decision)\D*?(\d{2,4})/(\d+)", s, re.IGNORECASE)
+    m = re.search(r"(regulation|directive|decision)\D*?(\d{1,4})/(\d{1,4})", s, re.IGNORECASE)
     if m:
-        kind, year, num = m.group(1).lower(), int(m.group(2)), int(m.group(3))
+        # EU citations are inconsistent: directives + post-2014 regulations are written
+        # year/number ("2014/35"), but pre-2015 regulations are "No number/year" ("765/2008").
+        # Detect the YEAR as the value in a plausible year range; the other part is the number.
+        kind, a, b = m.group(1).lower(), int(m.group(2)), int(m.group(3))
+        a_is_year, b_is_year = 1958 <= a <= 2099, 1958 <= b <= 2099
+        year, num = (b, a) if (b_is_year and not a_is_year) else (a, b)
         if year < 100:
             year += 1900 if year >= 70 else 2000
         return f"3{year}{_TYPE_LETTER[kind]}{num:04d}"

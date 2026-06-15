@@ -14,11 +14,17 @@ import json
 import fitz
 import pytest
 
+import config
 import llm_client
 from db.models import Base, Job, Regulation
 from db.session import engine, session_scope
 from scripts.seed_hs_nomenclature import DEFAULT_CSV, seed as seed_hs
 from scripts.seed_reference_data import seed_certification_bodies, seed_product_attributes
+
+# The unit suite exercises the CLASSIC pipeline (llm_client is mocked). Pin it so the
+# agentic default (which calls langchain chat_model, not llm_client) never makes real
+# API calls here; the agentic path has its own mocked tests (test_agentic_pipeline.py).
+config.PIPELINE_MODE = "classic"
 
 
 @pytest.fixture(scope="session", autouse=True)

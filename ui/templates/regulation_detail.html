@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}{{ reg.source_id }}{% endblock %}
+{% block content %}
+<h1>{{ reg.source_id }} — {{ reg.title or "(no title)" }}</h1>
+<p><a href="/regulations">← all regulations</a></p>
+<p class="muted">
+  {{ reg.document_type or "—" }} · {{ reg.jurisdiction or "—" }} · status: {{ reg.status }}<br>
+  published {{ reg.publication_date or "—" }} · in force {{ reg.entry_into_force_date or "—" }}<br>
+  OJ: {{ reg.oj_reference or "—" }}<br>
+  source file: {{ reg.file_path or "(acquired via EUR-Lex — no PDF)" }}
+  · <a href="/review/relationships/{{ reg.id }}">edit relationships →</a>
+</p>
+
+<h3>Fields ({{ field_groups|length }} fields · {{ total_fields }} values)</h3>
+<table>
+  <thead><tr><th>Field</th><th>Value(s)</th><th>Reference / segment</th><th>Conf.</th><th>Status</th></tr></thead>
+  <tbody>
+    {% for g in field_groups %}
+    <tr>
+      <td>{{ g.field_name }}{% if g.count > 1 %} <span class="muted">×{{ g.count }}</span>{% endif %}</td>
+      <td>
+        {% if g.count == 1 %}{{ g.entries[0].value }}
+        {% else %}
+        <ul style="margin:0;padding-left:1.1em">
+          {% for it in g.entries %}<li>{{ it.value }}{% if it.review_status != "auto-approved" %} <span class="muted">· {{ it.review_status }}</span>{% endif %}</li>{% endfor %}
+        </ul>
+        <details>
+          <summary class="muted" style="cursor:pointer">show per-item detail ({{ g.count }})</summary>
+          <table style="margin-top:.3em">
+            <thead><tr><th>Value</th><th>Reference</th><th>Seg</th><th>Conf.</th><th>Status</th></tr></thead>
+            <tbody>
+              {% for it in g.entries %}
+              <tr><td>{{ it.value }}</td><td>{{ it.reference }}</td><td>{{ it.segment }}</td><td>{{ "%.2f"|format(it.confidence) }}</td><td>{{ it.review_status }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </details>
+        {% endif %}
+      </td>
+      <td>{% if g.count == 1 %}{{ g.entries[0].reference }} · seg {{ g.entries[0].segment }}{% else %}<span class="muted">{{ g.count }} sources</span>{% endif %}</td>
+      <td>{% if g.count == 1 %}{{ "%.2f"|format(g.entries[0].confidence) }}{% else %}<span class="muted">≥{{ "%.2f"|format(g.min_conf) }}</span>{% endif %}</td>
+      <td>{{ g.status }}</td>
+    </tr>
+    {% else %}<tr><td colspan="5" class="muted">No fields.</td></tr>{% endfor %}
+  </tbody>
+</table>
+
+<h3>Applicability conditions ({{ conditions|length }})</h3>
+<table>
+  <thead><tr><th>Parameter</th><th>Type</th><th>Structured</th><th>Constraint</th><th>Raw text</th><th>Conf.</th><th>Status</th></tr></thead>
+  <tbody>
+    {% for c in conditions %}
+    <tr>
+      <td>{{ c.parameter_name }}</td>
+      <td>{{ c.condition_type }}</td>
+      <td>{{ "yes" if c.structured else "no" }}</td>
+      <td>
+        {% if c.structured %}
+          {{ c.operator }}
+          {%- if c.value_min is not none %} min={{ c.value_min }}{% endif %}
+          {%- if c.value_max is not none %} max={{ c.value_max }}{% endif %}
+          {%- if c.value_enum is not none %} in {{ c.value_enum }}{% endif %}
+          {%- if c.value_bool is not none %} ={{ c.value_bool }}{% endif %}
+          {{ c.unit }}
+        {% else %}<span class="muted">unstructured</span>{% endif %}
+      </td>
+      <td>{{ c.raw_text }}</td>
+      <td>{{ "%.2f"|format(c.confidence) }}</td>
+      <td>{{ c.review_status }}</td>
+    </tr>
+    {% else %}<tr><td colspan="7" class="muted">No conditions.</td></tr>{% endfor %}
+  </tbody>
+</table>
+
+<h3>Relationships ({{ relationships|length }})</h3>
+<table>
+  <thead><tr><th>Type</th><th>Target</th><th>Source</th><th>Conf.</th></tr></thead>
+  <tbody>
+    {% for r in relationships %}
+    <tr><td>{{ r.relation_type }}</td><td>{{ r.target }}</td><td>{{ r.source }}</td><td>{{ "%.2f"|format(r.confidence) }}</td></tr>
+    {% else %}<tr><td colspan="4" class="muted">No relationships.</td></tr>{% endfor %}
+  </tbody>
+</table>
+
+{% if hs %}
+<h3>HS code mappings ({{ hs|length }})</h3>
+<table>
+  <thead><tr><th>HS code</th><th>Match</th><th>Conf.</th><th>Status</th></tr></thead>
+  <tbody>
+    {% for h in hs %}<tr><td>{{ h.hs_code }}</td><td>{{ h.match_type }}</td><td>{{ "%.2f"|format(h.confidence) }}</td><td>{{ h.review_status }}</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

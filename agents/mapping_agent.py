@@ -60,6 +60,8 @@ class MappingAgent:
         for attr, field_name in _ARRAYS.items():
             for ef in getattr(extract_output, attr):
                 fields.append(self._map_field(field_name, ef, alias_map))
+        for route in extract_output.conformity_routes:
+            fields.append(self._map_conformity_route(route))
 
         conditions = [self._structure(c, attr_types) for c in extract_output.applicability_conditions]
 
@@ -112,6 +114,25 @@ class MappingAgent:
             reference=ef.reference,
             confidence=ef.confidence,
             source_segment_index=ef.source_segment_index,
+        )
+
+    @staticmethod
+    def _map_conformity_route(route) -> MappedField:
+        """A category-dependent conformity route → a structured ``conformity_route`` field.
+        canonical_value is a dict (persisted to value_json); modules are upper-cased."""
+        modules = [m.strip().upper() for m in route.modules if m and m.strip()]
+        category = route.category.strip()
+        canonical: dict = {"category": category, "modules": modules}
+        if route.condition:
+            canonical["condition"] = route.condition.strip()
+        summary = (f"Category {category}: " if category else "") + (", ".join(modules) or "(unspecified)")
+        return MappedField(
+            field_name="conformity_route",
+            raw_value=summary,
+            canonical_value=canonical,
+            reference=route.reference,
+            confidence=route.confidence,
+            source_segment_index=route.source_segment_index,
         )
 
     @staticmethod

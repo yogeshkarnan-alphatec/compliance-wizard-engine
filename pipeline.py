@@ -34,7 +34,25 @@ _COND_FLAG = re.compile(r"applicability_condition\[(\d+)\]")
 
 def run_pipeline(job_id: UUID) -> None:
     """Run the full pipeline for one job. Raises on unrecoverable errors (the
-    worker catches them and marks the job failed)."""
+    worker catches them and marks the job failed).
+
+    Dispatches on config.PIPELINE_MODE: "agentic" (default) runs the LangGraph
+    Planner/Extractor/Critic flow; "classic" runs the fixed sequence below. Both
+    share _persist/_resolve, so the data model and Review UI are identical.
+    """
+    from config import PIPELINE_MODE
+
+    if PIPELINE_MODE == "agentic":
+        from agentic.graph import run_agentic_pipeline
+
+        run_agentic_pipeline(job_id)
+        return
+
+    _run_classic_pipeline(job_id)
+
+
+def _run_classic_pipeline(job_id: UUID) -> None:
+    """The original fixed Read -> Extract -> Mapping -> Validation -> Fetch sequence."""
     job = _load_job(job_id)
 
     read_agent = ReadAgent()

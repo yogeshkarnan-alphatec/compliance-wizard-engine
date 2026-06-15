@@ -10,11 +10,15 @@ dependencies = [
     "pydantic>=2.6,<3.0",
     "pymupdf>=1.24",             # PDF parsing (fitz) — layout + page coords
     "openai>=1.30",
+    "langgraph>=0.2",            # agentic graph runtime (Planner + specialist nodes)
+    "langchain-openai>=0.2",     # ChatOpenAI model wrapper (default provider)
+    "langchain-core>=0.3",
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "jinja2>=3.1",
     "python-multipart>=0.0.9",   # FastAPI form/file uploads in Review UI
-    "httpx>=0.27",               # EUR-Lex / CELLAR REST calls
+    "httpx>=0.27",               # EUR-Lex / CELLAR REST calls (legacy adapter)
+    "requests>=2.31",            # used by the vendored eurlex (CELLAR) client
     "python-dotenv>=1.0",
 ]
 
@@ -24,6 +28,13 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.4",
 ]
+# Optional Claude provider path (agentic/model.py -> ChatAnthropic). OpenAI is the default,
+# so this is only needed when LLM_PROVIDER=anthropic.
+anthropic = ["langchain-anthropic>=0.2"]
+# Agent observability: LangSmith tracing (native to LangChain/LangGraph). Enabled via
+# env (LANGSMITH_TRACING=true + LANGSMITH_API_KEY). `langsmith` ships transitively with
+# langchain-core; this extra is just an explicit pin. Not required to run the pipeline.
+observability = ["langsmith>=0.1"]
 
 # Flat layout: top-level modules (config, llm_client, pipeline, worker) live at
 # the repo root alongside the package dirs (db/, schemas/, agents/, ...).
@@ -32,7 +43,7 @@ dev = [
 py-modules = ["config", "llm_client", "pipeline", "worker"]
 
 [tool.setuptools.packages.find]
-include = ["adapters*", "agents*", "engine*", "db*", "ui*", "schemas*", "scripts*"]
+include = ["adapters*", "agents*", "agentic*", "engine*", "db*", "ui*", "schemas*", "scripts*", "eurlex*", "evals*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

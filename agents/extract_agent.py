@@ -18,8 +18,9 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import llm_client
+from config import EXTRACT_MAX_CHARS
 from schemas.common import ExtractedField
-from schemas.extract import ExtractOutput, RawApplicabilityCondition
+from schemas.extract import ConformityRoute, ExtractOutput, RawApplicabilityCondition
 from schemas.read import ReadOutput
 
 _SYSTEM = (
@@ -57,10 +58,12 @@ _ARRAY_FIELDS = (
 class ExtractAgent:
     name = "extract"
 
-    def __init__(self, max_chars: int = 24000):
-        # Cap the prompt size; long directives are truncated with a marker. The
-        # cap lives here (not config) because it is a model-window concern.
-        self.max_chars = max_chars
+    def __init__(self, max_chars: int | None = None):
+        # Cap prompt size to the OpenAI account's TPM rate limit (config.EXTRACT_MAX_CHARS),
+        # not just the context window — a single request must fit tokens-per-minute. Larger
+        # docs degrade gracefully via priority selection in _build_prompt (annexes/articles
+        # kept, verbose recitals dropped first).
+        self.max_chars = max_chars if max_chars is not None else EXTRACT_MAX_CHARS
 
     def run(self, read_output: ReadOutput, job_id: UUID | None = None) -> ExtractOutput:
         job_id = job_id or read_output.job_id
@@ -71,16 +74,37 @@ class ExtractAgent:
 
     # --- prompt ------------------------------------------------------------
     def _build_prompt(self, read_output: ReadOutput) -> str:
-        lines = ["Document segments (index | page | title | text):"]
+        # Select segments by PRIORITY so that when a document exceeds the budget, the
+        # taxonomy-bearing parts (annexes, articles) survive and verbose preamble/recitals
+        # yield first. Selection is by priority; rendering stays in document order so the
+        # text reads coherently and source_segment_index references remain meaningful.
+        def _priority(seg) -> int:
+            title = (seg.section_title or "").lower()
+            if title.startswith("annex"):
+                return 0
+            if title.startswith(("article", "art.", "art ")):
+                return 1
+            if title.startswith(("chapter", "section")):
+                return 2
+            return 3  # untitled / preamble / recitals — least information-dense
+
         budget = self.max_chars
-        for seg in read_output.segments:
+        chosen: list[tuple[int, str]] = []
+        omitted = 0
+        for seg in sorted(read_output.segments, key=lambda s: (_priority(s), s.segment_index)):
             block = f"\n[{seg.segment_index}] (p.{seg.page_start}-{seg.page_end}) " \
                     f"{seg.section_title or '(untitled)'}\n{seg.text}"
-            if budget - len(block) < 0:
-                lines.append("\n...[truncated]...")
-                break
+            if len(block) > budget:
+                omitted += 1
+                continue
             budget -= len(block)
-            lines.append(block)
+            chosen.append((seg.segment_index, block))
+
+        chosen.sort(key=lambda x: x[0])  # render in document order
+        lines = ["Document segments (index | page | title | text):"]
+        lines.extend(block for _, block in chosen)
+        if omitted:
+            lines.append(f"\n...[{omitted} lower-priority segment(s) omitted to fit the budget]...")
         hints = read_output.metadata_hints or {}
         lines.append(
             "\n\nReturn a JSON object with these keys. Scalar keys hold one object "
@@ -90,7 +114,12 @@ class ExtractAgent:
             + ". Plus `regulation_mentions`: list of cited regulation identifier strings "
             "(e.g. 'Directive 89/686/EEC', 'Regulation (EU) 2016/425'). Plus "
             "`applicability_conditions`: list of {parameter_name, operator, value, unit, "
-            "condition_type ('inclusion'|'exclusion'), reference, confidence, raw_text}. "
+            "condition_type ('inclusion'|'exclusion'), reference, confidence, raw_text}. Plus "
+            "`conformity_routes`: list of {category, modules, condition, reference, confidence, "
+            "source_segment_index} — fill this ONLY when conformity assessment is "
+            "category-dependent (a table mapping equipment categories/classes to different "
+            "allowed modules, e.g. category I→['A'], II→['A2','D1','E1']); leave [] when there "
+            "is a single route (use the scalar conformity_* fields for that). "
             f"Document metadata hints: {json.dumps(hints, default=str)}"
         )
         return "\n".join(lines)
@@ -154,5 +183,26 @@ class ExtractAgent:
             except (ValueError, TypeError):
                 continue
         kwargs["applicability_conditions"] = conds
+
+        routes = []
+        for r in data.get("conformity_routes", []) or []:
+            if not isinstance(r, dict):
+                continue
+            mods = r.get("modules", [])
+            try:
+                routes.append(
+                    ConformityRoute(
+                        category=str(r.get("category", "")),
+                        modules=[str(m) for m in mods if m] if isinstance(mods, list) else [],
+                        condition=(str(r["condition"]) if r.get("condition") else None),
+                        reference=str(r.get("reference", "")),
+                        confidence=float(r.get("confidence", 0.0)),
+                        source_segment_index=int(r.get("source_segment_index", 0)),
+                    )
+                )
+            except (ValueError, TypeError):
+                continue
+        kwargs["conformity_routes"] = routes
+
         kwargs["extracted_at"] = datetime.now(timezone.utc)
         return ExtractOutput(**kwargs)

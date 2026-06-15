@@ -25,6 +25,10 @@ def _env(key: str, default: str | None = None, *, required: bool = False) -> str
     return value
 
 
+def _flag(key: str, default: str = "false") -> bool:
+    return (_env(key, default) or "").strip().lower() in ("1", "true", "yes", "on")
+
+
 # --- Human-in-the-loop routing ---------------------------------------------
 # Any extracted field below this confidence is flagged for human review.
 CONFIDENCE_THRESHOLD: float = float(_env("CONFIDENCE_THRESHOLD", "0.75"))
@@ -34,6 +38,31 @@ CONFIDENCE_THRESHOLD: float = float(_env("CONFIDENCE_THRESHOLD", "0.75"))
 OPENAI_MODEL: str = _env("OPENAI_MODEL", "gpt-4o")
 OPENAI_MAX_TOKENS: int = int(_env("OPENAI_MAX_TOKENS", "2000"))
 OPENAI_API_KEY: str | None = _env("OPENAI_API_KEY")  # not required at import; checked at call time
+
+# Max characters of document text sent to the Extract agent in one request. Tune to your
+# OpenAI rate limit — a single call must fit the account's tokens-per-minute (TPM) cap.
+# ~70k chars ≈ ~18k input tokens, which fits a 30k-TPM tier; raise it on a higher tier.
+# _build_prompt keeps annexes/articles and drops recitals first when it must truncate.
+EXTRACT_MAX_CHARS: int = int(_env("EXTRACT_MAX_CHARS", "70000"))
+
+# --- Agentic runtime (OpenAI Agents SDK) -----------------------------------
+# LLM_PROVIDER selects the model backend for the agents. "openai" (default) uses
+# OPENAI_MODEL; "anthropic" uses ANTHROPIC_MODEL via langchain-anthropic (needs the
+# `anthropic` extra + ANTHROPIC_API_KEY). The seam lives in agentic/model.py.
+LLM_PROVIDER: str = (_env("LLM_PROVIDER", "openai") or "openai").lower()
+ANTHROPIC_API_KEY: str | None = _env("ANTHROPIC_API_KEY")
+ANTHROPIC_MODEL: str = _env("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+# PIPELINE_MODE: "agentic" (Planner delegates) or "classic" (the fixed sequence).
+PIPELINE_MODE: str = (_env("PIPELINE_MODE", "agentic") or "agentic").lower()
+# Hard cap on Planner agent-loop turns (guards against runaway delegation).
+AGENT_MAX_TURNS: int = int(_env("AGENT_MAX_TURNS", "20"))
+
+# --- Observability (LangSmith, optional) -----------------------------------
+# LangChain/LangGraph auto-trace to LangSmith when LANGSMITH_TRACING is truthy and
+# LANGSMITH_API_KEY is set (both read straight from the environment). LANGSMITH_PROJECT
+# names the trace project. The durable per-call audit in llm_audit_log is independent.
+LANGSMITH_TRACING: bool = _flag("LANGSMITH_TRACING", "false") or _flag("LANGCHAIN_TRACING_V2", "false")
+LANGSMITH_PROJECT: str = _env("LANGSMITH_PROJECT", "compliance-wizard")
 
 # --- Database --------------------------------------------------------------
 # psycopg3 driver. Required — nothing works without it.

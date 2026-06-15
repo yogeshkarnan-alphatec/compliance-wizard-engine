@@ -84,6 +84,14 @@ def run_batch(batch_size: int) -> int:
 
 
 def main() -> None:
+    # Enable LangSmith tracing if configured (no-op otherwise). Best-effort.
+    try:
+        from agentic.observability import setup_observability
+
+        setup_observability()
+    except Exception:  # noqa: BLE001 — observability must never block the worker
+        pass
+
     parser = argparse.ArgumentParser(description="Compliance Wizard queue worker")
     parser.add_argument("--batch-size", type=int, default=WORKER_BATCH_SIZE)
     parser.add_argument("--once", action="store_true", help="Process one batch and exit")

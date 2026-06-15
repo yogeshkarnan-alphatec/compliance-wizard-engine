@@ -9,7 +9,9 @@ services:
       POSTGRES_PASSWORD: compliance
       POSTGRES_DB: compliance_wizard
     ports:
-      - "5432:5432"
+      # Host port is overridable (defaults to 5432). Set PG_HOST_PORT in .env on
+      # machines where 5432 is already taken by a native Postgres install.
+      - "${PG_HOST_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
