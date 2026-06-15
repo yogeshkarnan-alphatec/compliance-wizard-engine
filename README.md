@@ -73,14 +73,27 @@ alembic upgrade head
 python -m scripts.seed_reference_data              # cert bodies + product attributes → DB
 python -m scripts.seed_hs_nomenclature             # HS/CN nomenclature → DB
 
-# 4. Ingest a document, then process the queue
-python -c "from adapters.upload import UploadAdapter; print(UploadAdapter().fetch('path/to/directive.pdf').id)"
-python worker.py --once                            # process one batch and exit
-# or run continuously:  python worker.py
+# 4. Queue a document, then process it
+python -m scripts.enqueue 32014L0034               # by CELEX (acquired via the EUR-Lex engine)
+#   …or ingest a local PDF:
+#   python -c "from adapters.upload import UploadAdapter; print(UploadAdapter().fetch('path/to/directive.pdf').id)"
+python worker.py --once                            # process one batch and exit (or: python worker.py)
 
 # 5. Launch the Review UI + Wizard
 uvicorn ui.main:app --reload                       # http://127.0.0.1:8000/review
 ```
+
+### Pipeline modes (agentic by default)
+
+Ingestion runs as a **LangGraph multi-agent flow** (`PIPELINE_MODE=agentic`, the default): a
+Planner delegates to an LLM **Extractor** (structured output) and a **Critic** (faithfulness +
+bounded re-extract), with deterministic nodes for read / map / validate / enrich / persist —
+see [agentic/graph.py](agentic/graph.py) and [AGENTIC_REFACTOR_PLAN.md](AGENTIC_REFACTOR_PLAN.md).
+EU directives are acquired by CELEX through the vendored EUR-Lex engine ([eurlex/](eurlex/)),
+which also supplies typed relationships + publication/OJ metadata. Set `PIPELINE_MODE=classic`
+for the original fixed sequence. Watch a flow without persisting:
+`python -m scripts.trace_document <pdf> --celex <id> --agentic`. Optional LangSmith tracing:
+set `LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY`.
 
 ### Querying the Wizard
 
@@ -121,6 +134,10 @@ All env vars and thresholds live in one place: [config.py](config.py). See
 | `DATABASE_URL` | local Postgres | psycopg3 connection URL |
 | `OPENAI_API_KEY` | — | required for the Extract agent (not for migrations/tests) |
 | `OPENAI_MODEL` | `gpt-4o` | provider model |
+| `PIPELINE_MODE` | `agentic` | `agentic` (LangGraph) or `classic` (fixed sequence) |
+| `LLM_PROVIDER` | `openai` | `openai` or `anthropic` (Claude via `langchain-anthropic`) |
+| `AGENT_MAX_TURNS` | `20` | planner loop cap in agentic mode |
+| `LANGSMITH_TRACING` / `LANGSMITH_API_KEY` | off | optional LangGraph tracing to LangSmith |
 | `CONFIDENCE_THRESHOLD` | `0.75` | below this → human review |
 | `FILE_STORE_PATH` | `./file_store` | where adapters save raw PDFs |
 | `WORKER_BATCH_SIZE` / `WORKER_POLL_INTERVAL_SECONDS` | `1` / `5` | worker tuning |

@@ -16,6 +16,9 @@ from schemas.wizard import WizardQuery
     ("Regulation (EU) 2016/425", "32016R0425"),
     ("Directive 89/686/EEC", "31989L0686"),
     ("32016R0425", "32016R0425"),
+    # Pre-2015 regulations are cited "No number/year" — the 4-digit part is the year.
+    ("Regulation (EC) No 765/2008", "32008R0765"),
+    ("Regulation (EU) No 1025/2012", "32012R1025"),
 ])
 def test_normalize_identifier(mention, expected):
     assert normalize_identifier(mention) == expected
@@ -31,12 +34,14 @@ def _make_reg(source_id, title="T", jurisdiction="EU"):
 
 
 def test_resolve_creates_stub_and_inverse_edges(cleanup_regs):
-    cleanup_regs.extend(["TEST:RES", "32014L0035"])
+    # Use a FICTIONAL directive id (year 9999) — the suite shares the real Postgres, so a
+    # real CELEX here would let teardown delete genuine ingested data.
+    cleanup_regs.extend(["TEST:RES", "39999L0001"])
     reg_id = _make_reg("TEST:RES")
-    resolve_relationships(reg_id, mentions=["Directive 2014/35/EU"])
+    resolve_relationships(reg_id, mentions=["Directive 9999/1/EU"])
 
     with session_scope() as s:
-        stub = s.execute(select(Regulation).where(Regulation.source_id == "32014L0035")).scalar_one()
+        stub = s.execute(select(Regulation).where(Regulation.source_id == "39999L0001")).scalar_one()
         assert stub.ingestion_status == "stub" and stub.created_by == "resolution_engine"
         # Outgoing 'references' edge + inverse 'references' on the stub side.
         out_edges = s.scalar(select(func.count()).select_from(RegulationRelationship)
