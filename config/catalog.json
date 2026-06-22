@@ -1,6 +1,26 @@
 {
   "documents": [
+    { "celex": "32014L0035", "title": "Low Voltage Directive 2014/35/EU" },
+    { "celex": "32014L0030", "title": "Electromagnetic Compatibility (EMC) Directive 2014/30/EU" },
+    { "celex": "32006L0042", "title": "Machinery Directive 2006/42/EC" },
+    { "celex": "32014L0053", "title": "Radio Equipment Directive (RED) 2014/53/EU" },
+    { "celex": "32014L0068", "title": "Pressure Equipment Directive (PED) 2014/68/EU" },
+    { "celex": "32014L0029", "title": "Simple Pressure Vessels Directive 2014/29/EU" },
+    { "celex": "32009L0048", "title": "Toy Safety Directive 2009/48/EC" },
+    { "celex": "32014L0032", "title": "Measuring Instruments Directive (MID) 2014/32/EU" },
+    { "celex": "32014L0031", "title": "Non-automatic Weighing Instruments Directive 2014/31/EU" },
+    { "celex": "32014L0034", "title": "ATEX Equipment Directive 2014/34/EU" },
+    { "celex": "32014L0033", "title": "Lifts Directive 2014/33/EU" },
+    { "celex": "32016R0426", "title": "Gas Appliances Regulation (EU) 2016/426" },
+    { "celex": "32013L0053", "title": "Recreational Craft Directive 2013/53/EU" },
+    { "celex": "32013L0029", "title": "Pyrotechnic Articles Directive 2013/29/EU" },
+    { "celex": "32014L0028", "title": "Civil Explosives Directive 2014/28/EU" },
+    { "celex": "32016R0424", "title": "Cableway Installations Regulation (EU) 2016/424" },
+    { "celex": "32014L0090", "title": "Marine Equipment Directive 2014/90/EU" },
     { "celex": "32016R0425", "title": "Personal Protective Equipment Regulation (EU) 2016/425" },
-    { "celex": "32014L0035", "title": "Low Voltage Directive 2014/35/EU" }
+    { "celex": "32017R0745", "title": "Medical Devices Regulation (MDR) (EU) 2017/745" },
+    { "celex": "32017R0746", "title": "In Vitro Diagnostic Medical Devices Regulation (IVDR) (EU) 2017/746" },
+    { "celex": "32011R0305", "title": "Construction Products Regulation (CPR) (EU) 305/2011" },
+    { "celex": "32011L0065", "title": "Restriction of Hazardous Substances (RoHS) Directive 2011/65/EU" }
   ]
 }
