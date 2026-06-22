@@ -125,6 +125,7 @@ class MatchType(StrEnum):
     EXACT = "exact"
     FUZZY = "fuzzy"
     MANUAL = "manual"
+    INFERRED = "inferred"  # LLM-proposed from the directive's scope/summary, validated → review
 
 
 # --- product_attributes value typing ---------------------------------------

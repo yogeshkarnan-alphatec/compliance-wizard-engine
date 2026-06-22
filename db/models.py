@@ -83,6 +83,7 @@ class Regulation(Base):
     id: Mapped[uuid.UUID] = _uuid_pk()
     source_id: Mapped[str] = mapped_column(Text, unique=True)  # CELEX / national id, normalized
     title: Mapped[str | None] = mapped_column(Text)
+    summary: Mapped[str | None] = mapped_column(Text)  # LLM-extracted plain-English overview
     jurisdiction: Mapped[str | None] = mapped_column(Text)  # open vocab: EU/UK/EAEU/DE/...
     document_type: Mapped[str | None] = mapped_column(Text)
     publication_date: Mapped[date | None] = mapped_column()

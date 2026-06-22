@@ -11,6 +11,7 @@ regulation's fields and conditions rather than duplicating them.
 
 from __future__ import annotations
 
+import logging
 import re
 from uuid import UUID
 
@@ -28,6 +29,8 @@ from db.models import Job, Regulation, RegulationField
 from db.session import session_scope
 from schemas.fetch import FetchEnrichmentOutput
 from schemas.validation import ValidationOutput
+
+log = logging.getLogger(__name__)
 
 _COND_FLAG = re.compile(r"applicability_condition\[(\d+)\]")
 
@@ -111,6 +114,7 @@ def _persist(job: dict, v: ValidationOutput, fetch: FetchEnrichmentOutput) -> UU
             s.add(reg)
         reg.jurisdiction = v.jurisdiction
         reg.title = hints.get("title") or reg.title
+        reg.summary = v.summary or reg.summary
         reg.document_type = hints.get("document_type") or reg.document_type
         reg.file_path = job["file_path"]
         reg.ingestion_status = IngestionStatus.INGESTED.value
@@ -182,3 +186,29 @@ def _resolve(regulation_id: UUID, mentions, fetch: FetchEnrichmentOutput, v: Val
         if f.field_name == "hs_code" and isinstance(f.canonical_value, str) and f.canonical_value
     ]
     map_regulation_hs_codes(regulation_id, hs_codes)
+    _infer_hs(regulation_id, v)
+
+
+def _infer_hs(regulation_id: UUID, v: ValidationOutput) -> None:
+    """Infer probable HS codes from the directive's scope/summary and store them as
+    low-confidence, review-pending 'inferred' mappings. Most framework directives
+    (LVD, EMC, ...) never cite HS codes, so this is what gives the wizard candidates
+    for them. Gated by config; never fails the pipeline (mirrors enrichment)."""
+    from config import HS_INFERENCE_ENABLED
+
+    if not HS_INFERENCE_ENABLED:
+        return
+    try:
+        from engine.hs_inference import infer_hs_codes
+        from engine.hs_mapper import map_inferred_hs_codes
+
+        scope = next(
+            (f.canonical_value for f in v.fields
+             if f.field_name == "scope_description" and isinstance(f.canonical_value, str)),
+            "",
+        )
+        candidates = infer_hs_codes(scope, v.summary, job_id=v.job_id)
+        n = map_inferred_hs_codes(regulation_id, candidates)
+        log.info("HS inference: %d candidate code(s) mapped for %s", n, v.regulation_source_id)
+    except Exception as exc:  # noqa: BLE001 — inference is best-effort, must not fail ingest
+        log.warning("HS inference skipped for %s: %s", v.regulation_source_id, exc)

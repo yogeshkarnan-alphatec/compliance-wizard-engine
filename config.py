@@ -64,6 +64,14 @@ AGENT_MAX_TURNS: int = int(_env("AGENT_MAX_TURNS", "20"))
 LANGSMITH_TRACING: bool = _flag("LANGSMITH_TRACING", "false") or _flag("LANGCHAIN_TRACING_V2", "false")
 LANGSMITH_PROJECT: str = _env("LANGSMITH_PROJECT", "compliance-wizard")
 
+# --- HS code inference -----------------------------------------------------
+# When enabled, the resolution engine asks the LLM to propose probable HS codes from
+# each directive's scope/summary (validated against hs_nomenclature, written as
+# review-pending 'inferred' matches). This is what gives the wizard HS candidates for
+# framework directives that never cite codes themselves. Disabled in the test suite.
+HS_INFERENCE_ENABLED: bool = _flag("HS_INFERENCE_ENABLED", "true")
+HS_INFERENCE_MAX_CODES: int = int(_env("HS_INFERENCE_MAX_CODES", "8"))
+
 # --- Database --------------------------------------------------------------
 # psycopg3 driver. Required — nothing works without it.
 DATABASE_URL: str = _env(

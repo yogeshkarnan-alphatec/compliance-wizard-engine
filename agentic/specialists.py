@@ -48,6 +48,7 @@ def _merge_extractions(partials: list[ExtractionResult]) -> ExtractionResult:
     non-null across chunks; arrays/mentions are unioned (deduped, case-insensitive);
     conditions are concatenated. Nothing a chunk found is lost."""
     merged: dict = {}
+    merged["summary"] = next((p.summary for p in partials if p.summary), None)
     for name in _SCALAR_FIELDS:
         best = None
         for p in partials:

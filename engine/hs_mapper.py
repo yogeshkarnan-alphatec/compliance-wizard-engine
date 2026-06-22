@@ -46,6 +46,42 @@ def map_regulation_hs_codes(regulation_id, hs_codes: list[str]) -> None:
             _upsert(s, code, regulation_id, 0.3, "fuzzy", "pending")
 
 
+def map_inferred_hs_codes(regulation_id, candidates: list[dict]) -> int:
+    """Persist LLM-inferred HS candidates as 'inferred', review-pending mappings.
+
+    Additive and non-destructive: a code already mapped for this regulation (e.g. a
+    literal 'exact' match) is left untouched, so inference can only ADD candidates,
+    never downgrade a stronger match. Returns the number of new rows written.
+    """
+    if not candidates:
+        return 0
+    written = 0
+    with session_scope() as s:
+        for cand in candidates:
+            code = _digits(cand.get("hs_code", ""))
+            if len(code) < 6:
+                continue
+            exists = s.execute(
+                select(HsRegulationMap.id).where(
+                    HsRegulationMap.regulation_id == regulation_id,
+                    HsRegulationMap.hs_code == code,
+                )
+            ).first()
+            if exists:
+                continue
+            s.add(
+                HsRegulationMap(
+                    hs_code=code,
+                    regulation_id=regulation_id,
+                    confidence=cand.get("confidence", 0.3),
+                    match_type="inferred",
+                    review_status="pending",
+                )
+            )
+            written += 1
+    return written
+
+
 def _upsert(s, hs_code, regulation_id, confidence, match_type, review_status) -> None:
     stmt = pg_insert(HsRegulationMap).values(
         hs_code=hs_code,

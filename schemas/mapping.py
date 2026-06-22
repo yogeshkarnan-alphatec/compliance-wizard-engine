@@ -66,6 +66,7 @@ class MappingOutput(BaseModel):
     job_id: UUID
     regulation_source_id: str  # CELEX / national id
     jurisdiction: str
+    summary: str | None = None  # carried verbatim from extraction → regulations.summary
     fields: list[MappedField] = Field(default_factory=list)
     applicability_conditions: list[ApplicabilityCondition] = Field(default_factory=list)
     agent: Literal["mapping"] = "mapping"

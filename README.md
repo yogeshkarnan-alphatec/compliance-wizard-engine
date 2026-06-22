@@ -48,7 +48,10 @@ changes to agents.
   auto-maintains inverses, detects supersession cycles, and provides
   `get_amendment_chain()` (recursive CTE, both directions).
 - **hs_mapper** — lookup-driven HS↔regulation matching with confidence-scored fuzzy
-  fallback; below-threshold matches route to review, never guessed.
+  fallback; below-threshold matches route to review, never guessed. For directives that
+  cite no HS codes (most framework directives), **hs_inference** proposes 6-digit codes
+  from the scope/summary via the LLM, validates them against the nomenclature, and stores
+  them as `inferred` (review-pending) so the Wizard still finds candidates.
 - **wizard_matcher** — the Compliance Wizard query engine (Job 3). Returns
   `APPLIES | EXCLUDED | POSSIBLY_APPLIES | UNCERTAIN` and **never silently drops** a
   regulation that might apply.
@@ -139,6 +142,8 @@ All env vars and thresholds live in one place: [config.py](config.py). See
 | `AGENT_MAX_TURNS` | `20` | planner loop cap in agentic mode |
 | `LANGSMITH_TRACING` / `LANGSMITH_API_KEY` | off | optional LangGraph tracing to LangSmith |
 | `CONFIDENCE_THRESHOLD` | `0.75` | below this → human review |
+| `HS_INFERENCE_ENABLED` | `true` | infer HS codes from each directive's scope/summary (LLM, validated → review) |
+| `HS_INFERENCE_MAX_CODES` | `8` | max validated inferred HS codes stored per directive |
 | `FILE_STORE_PATH` | `./file_store` | where adapters save raw PDFs |
 | `WORKER_BATCH_SIZE` / `WORKER_POLL_INTERVAL_SECONDS` | `1` / `5` | worker tuning |
 

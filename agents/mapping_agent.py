@@ -21,6 +21,29 @@ from schemas.mapping import ApplicabilityCondition, MappedField, MappingOutput
 _NUM = re.compile(r"-?\d+(?:\.\d+)?")
 _VALID_OPS = {">", "<", ">=", "<=", "==", "in", "not_in", "contains"}
 
+# Word/symbol operators the LLM may emit, normalized to the canonical set above.
+# "between"/"range"/"within" mark a two-bound numeric range (handled specially).
+_OP_SYNONYMS = {
+    "between": "between", "range": "between", "within": "between", "from-to": "between",
+    "greater than": ">", "more than": ">", "above": ">", "over": ">", "gt": ">", "≥": ">=",
+    "at least": ">=", "min": ">=", "minimum": ">=", "gte": ">=", "=>": ">=",
+    "less than": "<", "below": "<", "under": "<", "lt": "<", "≤": "<=",
+    "at most": "<=", "max": "<=", "maximum": "<=", "lte": "<=", "=<": "<=",
+    "equal": "==", "equals": "==", "equal to": "==", "is": "==", "=": "==", "eq": "==",
+    "one of": "in", "any of": "in", "includes": "in", "member of": "in",
+    "none of": "not_in", "excludes": "not_in", "not one of": "not_in",
+}
+
+# LLM value_type hint → product_attributes value_type. Anything numeric-ish maps to
+# "range"; only genuinely categorical words map to "enum".
+_VTYPE_SYNONYMS = {
+    "range": "range", "numeric": "range", "number": "range", "float": "range",
+    "int": "range", "integer": "range", "decimal": "range", "measurement": "range",
+    "enum": "enum", "categorical": "enum", "category": "enum", "list": "enum",
+    "set": "enum", "choice": "enum", "string": "enum", "str": "enum", "text": "enum",
+    "boolean": "boolean", "bool": "boolean", "flag": "boolean",
+}
+
 # (extract attribute, field_name used in regulation_fields)
 _SCALARS = {
     "scope_description": "scope_description",
@@ -69,6 +92,7 @@ class MappingAgent:
             job_id=extract_output.job_id,
             regulation_source_id=regulation_source_id,
             jurisdiction=jurisdiction,
+            summary=extract_output.summary,
             fields=fields,
             applicability_conditions=conditions,
         )
@@ -170,10 +194,19 @@ class MappingAgent:
 
     # --- applicability condition structuring -------------------------------
     def _structure(self, raw: RawApplicabilityCondition, attr_types: dict[str, str]) -> ApplicabilityCondition:
+        """Turn a raw clause into a structured condition. The data type is resolved
+        BEFORE the branch — DB vocabulary first, then the LLM's value_type hint, then
+        the value's own content — so a numeric range is never misfiled as a string
+        enum (the Low Voltage Directive's "50–1000 V" bug). Anything we can't pin
+        down stays is_structured=False (→ wizard UNCERTAIN), never dropped."""
         param = self._norm_param(raw.parameter_name)
         ctype = "exclusion" if "excl" in raw.condition_type.lower() else "inclusion"
-        op = raw.operator.strip()
-        vtype = attr_types.get(param)
+        op = self._norm_operator(raw.operator)
+        nums = [float(n) for n in _NUM.findall(raw.value)]
+        # Type precedence: controlled vocab > LLM hint > inference from the value.
+        vtype = attr_types.get(param) or self._norm_vtype(raw.value_type)
+        if vtype is None:
+            vtype = "range" if nums else "enum"
 
         base = dict(
             parameter_name=param or None,
@@ -185,9 +218,6 @@ class MappingAgent:
         )
         unstructured = ApplicabilityCondition(is_structured=False, **base)
 
-        if op not in _VALID_OPS:
-            return unstructured
-
         # Boolean attribute → value_bool.
         if vtype == "boolean":
             b = self._parse_bool(raw.value)
@@ -195,40 +225,58 @@ class MappingAgent:
                 return ApplicabilityCondition(operator="==", value_bool=b, is_structured=True, **base)
             return unstructured
 
-        # Enum / membership.
-        if op in ("in", "not_in") or vtype == "enum":
+        # Enum / membership: driven by the resolved type, NOT the operator — this is the
+        # fix for the LVD bug, where a 'range' attribute stated with operator "in" used to
+        # fall here and become a string enum. A 'range' attribute never reaches this branch.
+        if vtype == "enum":
             enums = self._parse_enum(raw.value)
             if enums:
                 return ApplicabilityCondition(
-                    operator=(op if op in ("in", "not_in") else "in"),
+                    operator=("not_in" if op == "not_in" else "in"),
                     value_enum=enums,
                     is_structured=True,
                     **base,
                 )
             return unstructured
 
-        # Numeric range.
-        nums = [float(n) for n in _NUM.findall(raw.value)]
+        # Numeric range — covers comparisons AND membership/"between" with numbers.
         if not nums:
             return unstructured
         vmin = vmax = None
-        if len(nums) >= 2 and ("[" in raw.value or "-" in raw.value or "," in raw.value):
-            vmin, vmax = min(nums), max(nums)
+        op_out: str | None = None
+        if len(nums) >= 2 or op == "between":
+            vmin, vmax = min(nums), max(nums)  # two-bound range; operator implicit
         elif op in (">", ">="):
-            vmin = nums[0]
+            vmin, op_out = nums[0], op
         elif op in ("<", "<="):
-            vmax = nums[0]
+            vmax, op_out = nums[0], op
         elif op == "==":
             vmin = vmax = nums[0]
-        if vmin is None and vmax is None:
+            op_out = "=="
+        else:
+            # A lone number with an un-rangeable operator (e.g. "in", "contains"):
+            # don't guess a bound — keep it for review rather than mis-structure it.
             return unstructured
         return ApplicabilityCondition(
-            operator=op, value_min=vmin, value_max=vmax, is_structured=True, **base
+            operator=op_out, value_min=vmin, value_max=vmax, is_structured=True, **base
         )
 
     @staticmethod
     def _norm_param(name: str) -> str:
         return re.sub(r"[\s\-]+", "_", name.strip().lower())
+
+    @staticmethod
+    def _norm_operator(op: str) -> str:
+        s = (op or "").strip().lower()
+        if s in _VALID_OPS:
+            return s
+        return _OP_SYNONYMS.get(s, s)
+
+    @staticmethod
+    def _norm_vtype(hint: str | None) -> str | None:
+        if not hint:
+            return None
+        return _VTYPE_SYNONYMS.get(hint.strip().lower())
 
     @staticmethod
     def _parse_bool(value: str) -> bool | None:

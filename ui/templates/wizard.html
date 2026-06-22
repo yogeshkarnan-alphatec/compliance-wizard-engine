@@ -21,7 +21,7 @@
     {% for r in results %}
     <tr>
       <td><span class="badge {{ r.applicability_status }}">{{ r.applicability_status }}</span></td>
-      <td>{{ r.regulation_title }}</td>
+      <td>{{ r.regulation_title }}{% if r.regulation_summary %}<br><span class="muted">{{ r.regulation_summary }}</span>{% endif %}</td>
       <td>{{ r.jurisdiction }}</td>
       <td>{{ "%.2f"|format(r.confidence) }}</td>
       <td>{{ r.missing_attributes|join(", ") }}</td>

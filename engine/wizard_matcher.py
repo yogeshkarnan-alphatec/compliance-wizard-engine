@@ -83,6 +83,7 @@ def _evaluate_regulation(reg, conds, cand, attrs: dict, s) -> WizardResult:
     return WizardResult(
         regulation_id=reg.id,
         regulation_title=reg.title or reg.source_id,
+        regulation_summary=reg.summary,
         jurisdiction=reg.jurisdiction or "",
         applicability_status=status,
         matched_conditions=[_to_schema(c) for c in drivers],
