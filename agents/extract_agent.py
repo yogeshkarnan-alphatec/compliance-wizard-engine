@@ -64,6 +64,39 @@ class ExtractAgent:
         # docs degrade gracefully via priority selection in _build_prompt (annexes/articles
         # kept, verbose recitals dropped first).
         self.max_chars = max_chars if max_chars is not None else EXTRACT_MAX_CHARS
+        self._vocab_cache: str | None = None
+
+    # --- controlled vocabulary -------------------------------------------------
+    def _vocab_block(self) -> str:
+        """A compact listing of the product_attributes vocabulary (canonical name,
+        type, unit/values) injected into the prompt so the LLM emits canonical
+        parameter_names with the right value_type — which is what lets Mapping
+        structure e.g. the LVD voltage range as numeric min/max instead of a string."""
+        if self._vocab_cache is not None:
+            return self._vocab_cache
+        lines: list[str] = []
+        try:  # defensive: extraction must not hard-depend on a reachable DB
+            from sqlalchemy import select
+
+            from db.models import ProductAttribute
+            from db.session import session_scope
+
+            with session_scope() as s:
+                rows = s.execute(
+                    select(
+                        ProductAttribute.attribute_name,
+                        ProductAttribute.value_type,
+                        ProductAttribute.unit,
+                        ProductAttribute.enum_values,
+                    ).order_by(ProductAttribute.attribute_name)
+                ).all()
+            for name, vtype, unit, values in rows:
+                extra = (f" unit={unit}" if unit else "") + (f" values={values}" if values else "")
+                lines.append(f"  - {name} ({vtype}){extra}")
+        except Exception:  # noqa: BLE001 — no vocab is fine; the LLM still extracts freely
+            lines = []
+        self._vocab_cache = "\n".join(lines)
+        return self._vocab_cache
 
     def run(self, read_output: ReadOutput, job_id: UUID | None = None) -> ExtractOutput:
         job_id = job_id or read_output.job_id
@@ -106,21 +139,36 @@ class ExtractAgent:
         if omitted:
             lines.append(f"\n...[{omitted} lower-priority segment(s) omitted to fit the budget]...")
         hints = read_output.metadata_hints or {}
+        vocab = self._vocab_block()
+        vocab_instr = (
+            "\n\nControlled parameter vocabulary (canonical name, type, unit/values):\n"
+            + vocab
+            + "\nWhen an applicability clause refers to one of these quantities, use that "
+            "exact canonical `parameter_name` and set `value_type` to its type. A 'range' "
+            "attribute is numeric: give a numeric `value` (e.g. '50', '[50, 1000]') and use "
+            "operators >, <, >=, <=, ==, or 'between' — never a word. Only use 'enum' for "
+            "genuinely categorical attributes."
+            if vocab else ""
+        )
         lines.append(
             "\n\nReturn a JSON object with these keys. Scalar keys hold one object "
             "{value, reference, confidence, source_segment_index} or null. Array keys "
             "hold a list of such objects. Keys: "
             + ", ".join(_SCALAR_FIELDS + _ARRAY_FIELDS)
-            + ". Plus `regulation_mentions`: list of cited regulation identifier strings "
+            + ". Plus `summary`: a one-to-two sentence plain-English description of what this "
+            "regulation governs (a plain string, NOT an object; null if undeterminable). Plus "
+            "`regulation_mentions`: list of cited regulation identifier strings "
             "(e.g. 'Directive 89/686/EEC', 'Regulation (EU) 2016/425'). Plus "
             "`applicability_conditions`: list of {parameter_name, operator, value, unit, "
-            "condition_type ('inclusion'|'exclusion'), reference, confidence, raw_text}. Plus "
+            "value_type ('range'|'enum'|'boolean'), condition_type ('inclusion'|'exclusion'), "
+            "reference, confidence, raw_text}. Plus "
             "`conformity_routes`: list of {category, modules, condition, reference, confidence, "
             "source_segment_index} — fill this ONLY when conformity assessment is "
             "category-dependent (a table mapping equipment categories/classes to different "
             "allowed modules, e.g. category I→['A'], II→['A2','D1','E1']); leave [] when there "
-            "is a single route (use the scalar conformity_* fields for that). "
-            f"Document metadata hints: {json.dumps(hints, default=str)}"
+            "is a single route (use the scalar conformity_* fields for that)."
+            + vocab_instr
+            + f"\nDocument metadata hints: {json.dumps(hints, default=str)}"
         )
         return "\n".join(lines)
 
@@ -155,6 +203,8 @@ class ExtractAgent:
 
     def _parse(self, data: dict, job_id: UUID) -> ExtractOutput:
         kwargs: dict = {"job_id": job_id}
+        summary = data.get("summary")
+        kwargs["summary"] = str(summary).strip() if isinstance(summary, str) and summary.strip() else None
         for key in _SCALAR_FIELDS:
             kwargs[key] = self._field(data.get(key))
         for key in _ARRAY_FIELDS:
@@ -174,6 +224,7 @@ class ExtractAgent:
                         operator=str(c.get("operator", "")),
                         value=str(c.get("value", "")),
                         unit=(str(c["unit"]) if c.get("unit") else None),
+                        value_type=(str(c["value_type"]) if c.get("value_type") else None),
                         condition_type=str(c.get("condition_type", "inclusion")),
                         reference=str(c.get("reference", "")),
                         confidence=float(c.get("confidence", 0.0)),

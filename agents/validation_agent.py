@@ -47,6 +47,7 @@ class ValidationAgent:
             job_id=mapping_output.job_id,
             regulation_source_id=mapping_output.regulation_source_id,
             jurisdiction=mapping_output.jurisdiction,
+            summary=mapping_output.summary,
             fields=mapping_output.fields,
             applicability_conditions=mapping_output.applicability_conditions,
             flags=flags,

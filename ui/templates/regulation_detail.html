@@ -10,6 +10,7 @@
   source file: {{ reg.file_path or "(acquired via EUR-Lex — no PDF)" }}
   · <a href="/review/relationships/{{ reg.id }}">edit relationships →</a>
 </p>
+{% if reg.summary %}<p><strong>Summary.</strong> {{ reg.summary }}</p>{% endif %}
 
 <h3>Fields ({{ field_groups|length }} fields · {{ total_fields }} values)</h3>
 <table>

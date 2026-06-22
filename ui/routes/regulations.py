@@ -100,6 +100,7 @@ def regulation_detail(request: Request, regulation_id: UUID):
 
         meta = {
             "id": str(reg.id), "source_id": reg.source_id, "title": reg.title or "",
+            "summary": reg.summary or "",
             "document_type": reg.document_type or "", "jurisdiction": reg.jurisdiction or "",
             "status": reg.ingestion_status, "publication_date": reg.publication_date,
             "entry_into_force_date": reg.entry_into_force_date, "oj_reference": reg.oj_reference or "",

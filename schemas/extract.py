@@ -22,10 +22,15 @@ class RawApplicabilityCondition(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    parameter_name: str  # e.g. "rated_voltage", "pressure_bar", "intended_use"
-    operator: str  # ">", "<", "in", ... — validated in Mapping
+    parameter_name: str  # e.g. "rated_voltage_vac", "operating_pressure_bar", "intended_use"
+    operator: str  # ">", "<", "in", "between", ... — normalized in Mapping
     value: str  # "50", "[50, 1000]", "children under 14"
     unit: str | None = None  # "V AC", "bar", "kg"
+    # The data type the LLM believes this parameter is ("range"|"enum"|"boolean").
+    # A hint only: Mapping prefers the product_attributes vocabulary, then this, then
+    # infers from the value's content — so a misclassified numeric range is still
+    # structured as min/max rather than dropped to a string enum.
+    value_type: str | None = None
     condition_type: str  # "inclusion" | "exclusion" — coerced to enum in Mapping
     reference: str
     confidence: float = Field(ge=0.0, le=1.0)
@@ -52,6 +57,9 @@ class ExtractOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     job_id: UUID
+
+    # --- Overview ---
+    summary: str | None = None  # plain-English description of what the regulation governs
 
     # --- Scope ---
     scope_description: ExtractedField | None = None
@@ -92,6 +100,7 @@ class ExtractOutput(BaseModel):
 # Everything the LLM fills in — i.e. ExtractOutput minus the infra fields
 # (job_id / agent / extracted_at). Kept as a tuple so the converter stays DRY.
 _EXTRACTION_FIELDS = (
+    "summary",
     "scope_description", "scope_params", "hs_codes",
     "conformity_path_testing", "conformity_path_inspection",
     "conformity_assessment_type", "conformity_body_type", "conformity_routes",
@@ -115,6 +124,7 @@ class ExtractionResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    summary: str | None = None
     scope_description: ExtractedField | None = None
     scope_params: list[ExtractedField] = Field(default_factory=list)
     hs_codes: list[ExtractedField] = Field(default_factory=list)

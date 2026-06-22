@@ -30,6 +30,7 @@ class WizardResult(BaseModel):
 
     regulation_id: UUID
     regulation_title: str
+    regulation_summary: str | None = None  # plain-English overview of the directive
     jurisdiction: str
     applicability_status: Literal["APPLIES", "EXCLUDED", "POSSIBLY_APPLIES", "UNCERTAIN"]
     matched_conditions: list[ApplicabilityCondition] = Field(default_factory=list)

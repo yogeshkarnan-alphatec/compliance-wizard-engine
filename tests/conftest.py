@@ -26,6 +26,11 @@ from scripts.seed_reference_data import seed_certification_bodies, seed_product_
 # API calls here; the agentic path has its own mocked tests (test_agentic_pipeline.py).
 config.PIPELINE_MODE = "classic"
 
+# HS inference makes a live LLM call from _resolve (outside the classic llm_client mock
+# and the agentic chat_model mock). Disable it globally; the dedicated inference tests
+# mock llm_client and re-enable it explicitly.
+config.HS_INFERENCE_ENABLED = False
+
 
 @pytest.fixture(scope="session", autouse=True)
 def _schema_and_seed():
