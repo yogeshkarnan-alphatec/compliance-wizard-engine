@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Condition Review{% endblock %}
+{% block content %}
+<p><a href="/review">← back to queue</a></p>
+<h1>{{ regulation }} — <span class="muted">applies-when rule</span></h1>
+
+<div class="why">
+  <span class="badge {{ reason }}">{{ reason_label }}</span>
+  <span>{{ reason_hint }}</span>
+  <span class="muted">· status: <strong>{{ review_status }}</strong> · confidence {{ "%.2f"|format(confidence) }}</span>
+</div>
+
+<div class="two-col">
+  <div class="panel">
+    <h3>Original clause</h3>
+    <pre>{{ raw_text or "(no raw text recorded)" }}</pre>
+    <table class="kv">
+      <tr><th>Citation</th><td>{{ reference }}</td></tr>
+      <tr><th>Direction</th><td>{{ condition_type }}</td></tr>
+      <tr><th>Structured?</th><td>{{ "yes" if is_structured else "no — Wizard treats as UNCERTAIN" }}</td></tr>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h3>Interpreted as</h3>
+    <table class="kv">
+      <tr><th>Rule</th><td>{{ summary }}</td></tr>
+      <tr><th>Parameter</th><td>{{ parameter_name or "—" }}</td></tr>
+    </table>
+
+    <h3>Action</h3>
+    <form method="post" action="/review/condition/{{ condition_id }}">
+      <p><label>Parameter name (correct the mapping)<br>
+        <input name="parameter_name" value="{{ parameter_name }}" style="width:100%"></label></p>
+      <p><label>Clause text<br>
+        <textarea name="raw_text" rows="3" style="width:100%">{{ raw_text }}</textarea></label></p>
+      <button name="action" value="approve" type="submit">Approve</button>
+      <button name="action" value="edit" type="submit" class="secondary">Save edit</button>
+      <button name="action" value="reject" type="submit" class="danger">Reject</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

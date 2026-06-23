@@ -14,6 +14,8 @@ th { background: #f3f4f6; }
 .invalid_hs, .unresolved_alias { background: #fee2e2; color: #991b1b; }
 .unstructured_condition, .unknown_parameter { background: #ede9fe; color: #5b21b6; }
 .flagged { background: #e5e7eb; color: #374151; }
+.type-field { background: #dbeafe; color: #1e40af; }
+.type-condition { background: #ede9fe; color: #5b21b6; }
 .APPLIES { background: #dcfce7; color: #166534; }
 .EXCLUDED { background: #fee2e2; color: #991b1b; }
 .POSSIBLY_APPLIES { background: #fef3c7; color: #92400e; }
@@ -28,3 +30,7 @@ button.danger { background: #dc2626; }
 button.secondary { background: #6b7280; }
 .filters { margin-bottom: 16px; display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
 .muted { color: #6b7280; font-size: 0.85rem; }
+.why { background: #fff; border: 1px solid #e5e7eb; border-left: 4px solid #2563eb; border-radius: 6px; padding: 10px 14px; margin: 12px 0 18px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+table.kv { width: 100%; }
+table.kv th { width: 38%; background: #f9fafb; font-weight: 600; }
+.badge[title] { cursor: help; }

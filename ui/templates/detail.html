@@ -1,23 +1,56 @@
 {% extends "base.html" %}
 {% block title %}Field Detail{% endblock %}
 {% block content %}
+<p><a href="/review">← back to queue</a></p>
 <h1>{{ regulation }} — <span class="muted">{{ field_name }}</span></h1>
-<p><a href="/review">← back to queue</a> &nbsp; status: <strong>{{ review_status }}</strong>
-   &nbsp; <span class="badge {{ reason }}">{{ reason }}</span></p>
+
+<div class="why">
+  <span class="badge {{ reason }}">{{ reason_label }}</span>
+  <span>{{ reason_hint }}</span>
+  <span class="muted">· status: <strong>{{ review_status }}</strong> · confidence {{ "%.2f"|format(confidence) }}</span>
+</div>
 
 <div class="two-col">
   <div class="panel">
-    <h3>Source (PDF segment)</h3>
+    <h3>Evidence</h3>
+    {% if has_source %}
     <pre>{{ snippet }}</pre>
+    {% else %}
+    <p class="muted">No source PDF was stored for this regulation (it was acquired
+      via API), so the original passage can't be shown. The citation below is the
+      provenance the pipeline recorded.</p>
+    <table class="kv">
+      <tr><th>Citation</th><td>{{ reference }}</td></tr>
+      <tr><th>Extracted by</th><td>{{ extracted_by or "—" }}</td></tr>
+      <tr><th>Mapped by</th><td>{{ mapped_by or "—" }}</td></tr>
+    </table>
+    <h4>Raw extraction</h4>
+    <pre>{{ raw_value }}</pre>
+    {% endif %}
   </div>
+
   <div class="panel">
     <h3>Extracted &amp; mapped</h3>
-    <table>
-      <tr><th>Raw value</th><td>{{ raw_value }}</td></tr>
+    <table class="kv">
       <tr><th>Mapped value</th><td>{{ mapped_value }}</td></tr>
       <tr><th>Reference</th><td>{{ reference }}</td></tr>
       <tr><th>Confidence</th><td>{{ "%.2f"|format(confidence) }}</td></tr>
     </table>
+
+    {% if is_cert_body %}
+    <h3>Resolve to a known body</h3>
+    <form method="post" action="/review/field/{{ field_id }}">
+      <p><label>Certification body<br>
+        <select name="body_id" style="width:100%">
+          <option value="">— select —</option>
+          {% for b in cert_bodies %}
+          <option value="{{ b.id }}">{{ b.name }}</option>
+          {% endfor %}
+        </select></label></p>
+      <input type="hidden" name="reviewer" value="reviewer">
+      <button name="action" value="resolve" type="submit">Resolve &amp; approve</button>
+    </form>
+    {% endif %}
 
     <h3>Action</h3>
     <form method="post" action="/review/field/{{ field_id }}">
