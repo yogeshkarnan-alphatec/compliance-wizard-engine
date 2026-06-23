@@ -12,7 +12,15 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from ui.routes import detail, hs_review, queue, regulations, relationships, wizard
+from ui.routes import (
+    condition_detail,
+    detail,
+    hs_review,
+    queue,
+    regulations,
+    relationships,
+    wizard,
+)
 
 app = FastAPI(title="Compliance Wizard — Review UI")
 
@@ -21,6 +29,7 @@ app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")
 app.include_router(queue.router)
 app.include_router(regulations.router)
 app.include_router(detail.router)
+app.include_router(condition_detail.router)
 app.include_router(hs_review.router)
 app.include_router(relationships.router)
 app.include_router(wizard.router)

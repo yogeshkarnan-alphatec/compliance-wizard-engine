@@ -18,12 +18,20 @@ from uuid import UUID
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse
 
+from sqlalchemy import select
+
 from agents.read_agent import ReadAgent
 from db.enums import ReviewStatus
-from db.models import Regulation, RegulationField
+from db.models import CertificationBody, Regulation, RegulationField
 from db.session import session_scope
 from ui.deps import TEMPLATES
-from ui.review_helpers import derive_field_reason, display_value
+from ui.review_helpers import (
+    derive_field_reason,
+    display_value,
+    raw_extraction,
+    reason_hint,
+    reason_label,
+)
 
 router = APIRouter()
 
@@ -49,17 +57,40 @@ def field_detail(request: Request, field_id: UUID):
         if field is None:
             return RedirectResponse(url="/review", status_code=303)
         reg = s.get(Regulation, field.regulation_id)
+        reason = derive_field_reason(field)
+        # The source PDF is only available when the adapter persisted it; for
+        # API-acquired (EUR-Lex) regulations file_path is null, so we fall back to
+        # the citation reference we always have rather than a dead empty panel.
+        has_source = bool(reg.file_path)
+        is_cert_body = field.field_name == "certification_body"
+        cert_bodies = []
+        if is_cert_body:
+            cert_bodies = [
+                {"id": str(b.id), "name": b.canonical_name}
+                for b in s.execute(
+                    select(CertificationBody).order_by(CertificationBody.canonical_name)
+                ).scalars()
+            ]
         ctx = {
             "field_id": str(field.id),
             "regulation": reg.title or reg.source_id,
             "field_name": field.field_name,
-            "raw_value": field.value_text if field.value_json is None else "",
+            "raw_value": raw_extraction(field),
             "mapped_value": display_value(field),
-            "reference": field.reference or "",
+            "reference": field.reference or "(no citation recorded)",
             "confidence": field.confidence or 0.0,
-            "reason": derive_field_reason(field),
+            "reason": reason,
+            "reason_label": reason_label(reason),
+            "reason_hint": reason_hint(reason),
             "review_status": field.review_status,
-            "snippet": _source_snippet(reg.file_path, field.source_segment_index),
+            "extracted_by": field.extracted_by or "",
+            "mapped_by": field.mapped_by or "",
+            "has_source": has_source,
+            "snippet": _source_snippet(reg.file_path, field.source_segment_index)
+            if has_source
+            else "",
+            "is_cert_body": is_cert_body,
+            "cert_bodies": cert_bodies,
         }
     return TEMPLATES.TemplateResponse(request, "detail.html", ctx)
 
@@ -69,6 +100,7 @@ def field_action(
     field_id: UUID,
     action: str = Form(...),
     value: str = Form(""),
+    body_id: str = Form(""),
     note: str = Form(""),
     reviewer: str = Form("reviewer"),
 ):
@@ -84,6 +116,17 @@ def field_action(
             field.value_text = value
             field.value_json = None
             field.review_status = ReviewStatus.HUMAN_APPROVED.value
+        elif action == "resolve" and body_id:
+            # Map an unrecognized certification body to a known one.
+            body = s.get(CertificationBody, UUID(body_id))
+            if body is not None:
+                field.value_json = {
+                    "body_id": str(body.id),
+                    "resolved": True,
+                    "canonical_name": body.canonical_name,
+                }
+                field.value_text = None
+                field.review_status = ReviewStatus.HUMAN_APPROVED.value
         elif action == "reject":
             field.review_status = ReviewStatus.REJECTED.value
         field.reviewer_note = note or field.reviewer_note

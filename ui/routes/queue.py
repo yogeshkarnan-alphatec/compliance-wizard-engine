@@ -17,7 +17,15 @@ from db.enums import ReviewStatus
 from db.models import ApplicabilityCondition, Regulation, RegulationField
 from db.session import session_scope
 from ui.deps import TEMPLATES
-from ui.review_helpers import derive_condition_reason, derive_field_reason, display_value
+from ui.review_helpers import (
+    condition_summary,
+    derive_condition_reason,
+    derive_field_reason,
+    display_value,
+    reason_hint,
+    reason_label,
+    type_label,
+)
 
 router = APIRouter()
 
@@ -37,11 +45,14 @@ def queue_view(request: Request, jurisdiction: str = "", min_conf: float = 0.0, 
             conf = field.confidence or 0.0
             if not (min_conf <= conf <= max_conf):
                 continue
+            reason = derive_field_reason(field)
             items.append({
-                "kind": "field", "id": str(field.id), "regulation": reg.title or reg.source_id,
+                "kind": "field", "type_label": type_label("field"),
+                "id": str(field.id), "regulation": reg.title or reg.source_id,
                 "jurisdiction": reg.jurisdiction or "", "name": field.field_name,
                 "value": display_value(field), "confidence": conf,
-                "reason": derive_field_reason(field), "link": f"/review/field/{field.id}",
+                "reason": reason, "reason_label": reason_label(reason),
+                "reason_hint": reason_hint(reason), "link": f"/review/field/{field.id}",
             })
 
         cq = (
@@ -55,11 +66,14 @@ def queue_view(request: Request, jurisdiction: str = "", min_conf: float = 0.0, 
             conf = cond.confidence or 0.0
             if not (min_conf <= conf <= max_conf):
                 continue
+            reason = derive_condition_reason(cond)
             items.append({
-                "kind": "condition", "id": str(cond.id), "regulation": reg.title or reg.source_id,
+                "kind": "condition", "type_label": type_label("condition"),
+                "id": str(cond.id), "regulation": reg.title or reg.source_id,
                 "jurisdiction": reg.jurisdiction or "", "name": cond.parameter_name or "(raw)",
-                "value": cond.raw_text or "", "confidence": conf,
-                "reason": derive_condition_reason(cond), "link": f"/review/relationships/{reg.id}",
+                "value": condition_summary(cond), "confidence": conf,
+                "reason": reason, "reason_label": reason_label(reason),
+                "reason_hint": reason_hint(reason), "link": f"/review/condition/{cond.id}",
             })
 
     items.sort(key=lambda i: i["confidence"])  # lowest confidence first

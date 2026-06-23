@@ -16,20 +16,25 @@
   <button class="secondary" type="submit">Bulk approve</button>
 </form>
 
+<p class="muted">Each row is something the pipeline wasn't sure about. A
+<strong>Data field</strong> is one extracted value (e.g. a certification body);
+an <strong>Applies-when rule</strong> is a condition that decides whether a
+regulation applies. Use the <strong>review →</strong> link to see the evidence and approve, edit, or reject.</p>
+
 <table>
   <thead>
-    <tr><th>Kind</th><th>Regulation</th><th>Jur.</th><th>Field / Param</th><th>Value</th><th>Conf.</th><th>Reason</th><th></th></tr>
+    <tr><th>Type</th><th>Regulation</th><th>Jur.</th><th>What</th><th>Value</th><th>Conf.</th><th>Why flagged</th><th></th></tr>
   </thead>
   <tbody>
     {% for it in items %}
     <tr>
-      <td>{{ it.kind }}</td>
+      <td><span class="badge type-{{ it.kind }}">{{ it.type_label }}</span></td>
       <td>{{ it.regulation }}</td>
       <td>{{ it.jurisdiction }}</td>
       <td>{{ it.name }}</td>
-      <td>{{ it.value[:80] }}</td>
+      <td>{{ it.value[:80] }}{% if it.value|length > 80 %}…{% endif %}</td>
       <td>{{ "%.2f"|format(it.confidence) }}</td>
-      <td><span class="badge {{ it.reason }}">{{ it.reason }}</span></td>
+      <td><span class="badge {{ it.reason }}" title="{{ it.reason_hint }}">{{ it.reason_label }}</span></td>
       <td><a href="{{ it.link }}">review →</a></td>
     </tr>
     {% else %}
