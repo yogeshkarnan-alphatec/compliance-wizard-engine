@@ -34,10 +34,14 @@ router = APIRouter()
 def regulations_index(request: Request, page: int = 1, per_page: int = DEFAULT_PER_PAGE):
     rows: list[dict] = []
     with session_scope() as s:
-        total = s.scalar(select(func.count()).select_from(Regulation)) or 0
+        # Count only the regulations that are not STUBs, since those are not displayed in the UI
+        total = s.scalar(
+            select(func.count()).select_from(Regulation)
+        ) or 0
         pg = build_page(page, per_page, total)
         regs = s.execute(
             select(Regulation).order_by(Regulation.created_at.desc())
+            # Count only the regulations that are not STUBs, since those are not displayed in the UI
             .where(Regulation.ingestion_status != IngestionStatus.STUB.value)
             .offset(pg.offset).limit(pg.per_page)
         ).scalars().all()
