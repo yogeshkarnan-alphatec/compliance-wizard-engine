@@ -34,6 +34,7 @@ button.secondary { background: #6b7280; }
 table.kv { width: 100%; }
 table.kv th { width: 38%; background: #f9fafb; font-weight: 600; }
 .badge[title] { cursor: help; }
+
 .pagination { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 14px; }
 .pagination-links { display: inline-flex; align-items: center; gap: 4px; }
 .pagination-links a, .pagination-links span { padding: 4px 9px; border-radius: 6px; font-size: 0.85rem; text-decoration: none; }
@@ -43,3 +44,5 @@ table.kv th { width: 38%; background: #f9fafb; font-weight: 600; }
 .pagination-links .disabled, .pagination-links .ellipsis { color: #9ca3af; }
 .pagination-rows { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
 .pagination-rows select { padding: 4px 6px; }
+
+td.ts { white-space: nowrap; color: #6b7280; }
