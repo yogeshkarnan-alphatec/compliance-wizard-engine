@@ -22,8 +22,10 @@ from ui.review_helpers import (
     derive_condition_reason,
     derive_field_reason,
     display_value,
+    format_timestamp,
     reason_hint,
     reason_label,
+    relative_age,
     type_label,
 )
 
@@ -53,6 +55,8 @@ def queue_view(request: Request, jurisdiction: str = "", min_conf: float = 0.0, 
                 "value": display_value(field), "confidence": conf,
                 "reason": reason, "reason_label": reason_label(reason),
                 "reason_hint": reason_hint(reason), "link": f"/review/field/{field.id}",
+                "appeared": format_timestamp(field.created_at),
+                "appeared_rel": relative_age(field.created_at),
             })
 
         cq = (
@@ -74,6 +78,8 @@ def queue_view(request: Request, jurisdiction: str = "", min_conf: float = 0.0, 
                 "value": condition_summary(cond), "confidence": conf,
                 "reason": reason, "reason_label": reason_label(reason),
                 "reason_hint": reason_hint(reason), "link": f"/review/condition/{cond.id}",
+                "appeared": format_timestamp(cond.created_at),
+                "appeared_rel": relative_age(cond.created_at),
             })
 
     items.sort(key=lambda i: i["confidence"])  # lowest confidence first

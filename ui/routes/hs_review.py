@@ -18,6 +18,7 @@ from db.enums import ReviewStatus
 from db.models import HsNomenclature, HsRegulationMap, Regulation
 from db.session import session_scope
 from ui.deps import TEMPLATES
+from ui.review_helpers import format_timestamp, relative_age
 
 router = APIRouter()
 
@@ -42,6 +43,8 @@ def hs_review_view(request: Request):
                 "id": str(hmap.id), "regulation": reg.title or reg.source_id,
                 "hs_code": hmap.hs_code, "confidence": hmap.confidence or 0.0,
                 "match_type": hmap.match_type,
+                "appeared": format_timestamp(hmap.created_at),
+                "appeared_rel": relative_age(hmap.created_at),
                 "candidates": [{"code": c, "desc": d} for c, d in candidates],
             })
     return TEMPLATES.TemplateResponse(request, "hs_review.html", {"rows": rows})

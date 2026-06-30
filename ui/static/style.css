@@ -34,3 +34,4 @@ button.secondary { background: #6b7280; }
 table.kv { width: 100%; }
 table.kv th { width: 38%; background: #f9fafb; font-weight: 600; }
 .badge[title] { cursor: help; }
+td.ts { white-space: nowrap; color: #6b7280; }

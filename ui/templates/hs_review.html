@@ -5,7 +5,7 @@
 
 <table>
   <thead>
-    <tr><th>Regulation</th><th>HS code</th><th>Match</th><th>Conf.</th><th>Candidate matches</th><th>Action</th></tr>
+    <tr><th>Regulation</th><th>HS code</th><th>Match</th><th>Conf.</th><th>Appeared</th><th>Candidate matches</th><th>Action</th></tr>
   </thead>
   <tbody>
     {% for r in rows %}
@@ -14,6 +14,7 @@
       <td>{{ r.hs_code }}</td>
       <td>{{ r.match_type }}</td>
       <td>{{ "%.2f"|format(r.confidence) }}</td>
+      <td class="ts" title="{{ r.appeared_rel }}">{{ r.appeared }}</td>
       <td>
         <form method="post" action="/review/hs-mapping/{{ r.id }}">
           <select name="chosen_code">
@@ -33,7 +34,7 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="6" class="muted">No pending HS mappings.</td></tr>
+    <tr><td colspan="7" class="muted">No pending HS mappings.</td></tr>
     {% endfor %}
   </tbody>
 </table>

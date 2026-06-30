@@ -23,7 +23,7 @@ regulation applies. Use the <strong>review →</strong> link to see the evidence
 
 <table>
   <thead>
-    <tr><th>Type</th><th>Regulation</th><th>Jur.</th><th>What</th><th>Value</th><th>Conf.</th><th>Why flagged</th><th></th></tr>
+    <tr><th>Type</th><th>Regulation</th><th>Jur.</th><th>What</th><th>Value</th><th>Conf.</th><th>Why flagged</th><th>Appeared</th><th></th></tr>
   </thead>
   <tbody>
     {% for it in items %}
@@ -35,10 +35,11 @@ regulation applies. Use the <strong>review →</strong> link to see the evidence
       <td>{{ it.value[:80] }}{% if it.value|length > 80 %}…{% endif %}</td>
       <td>{{ "%.2f"|format(it.confidence) }}</td>
       <td><span class="badge {{ it.reason }}" title="{{ it.reason_hint }}">{{ it.reason_label }}</span></td>
+      <td class="ts" title="{{ it.appeared_rel }}">{{ it.appeared }}</td>
       <td><a href="{{ it.link }}">review →</a></td>
     </tr>
     {% else %}
-    <tr><td colspan="8" class="muted">Nothing pending. 🎉</td></tr>
+    <tr><td colspan="9" class="muted">Nothing pending. 🎉</td></tr>
     {% endfor %}
   </tbody>
 </table>
