@@ -24,24 +24,23 @@ from db.models import (
 )
 from db.session import session_scope
 from ui.deps import TEMPLATES
+from ui.pagination import DEFAULT_PER_PAGE, build_page
 from ui.review_helpers import display_value
 
 router = APIRouter()
 
 
 @router.get("/regulations")
-def regulations_index(request: Request):
+def regulations_index(request: Request, page: int = 1, per_page: int = DEFAULT_PER_PAGE):
     rows: list[dict] = []
     with session_scope() as s:
-        # regs = s.execute(select(Regulation).order_by(Regulation.created_at.desc())).scalars().all()
-
-        # Option A — exclude stubs explicitly (keeps queued/processing/ingested/failed visible)
+        total = s.scalar(select(func.count()).select_from(Regulation)) or 0
+        pg = build_page(page, per_page, total)
         regs = s.execute(
-            select(Regulation)
+            select(Regulation).order_by(Regulation.created_at.desc())
             .where(Regulation.ingestion_status != IngestionStatus.STUB.value)
-            .order_by(Regulation.created_at.desc())
+            .offset(pg.offset).limit(pg.per_page)
         ).scalars().all()
-
         for reg in regs:
             nf = s.scalar(select(func.count()).select_from(RegulationField).where(RegulationField.regulation_id == reg.id))
             nc = s.scalar(select(func.count()).select_from(ApplicabilityCondition).where(ApplicabilityCondition.regulation_id == reg.id))
@@ -51,7 +50,7 @@ def regulations_index(request: Request):
                 "document_type": reg.document_type or "", "jurisdiction": reg.jurisdiction or "",
                 "status": reg.ingestion_status, "fields": nf, "conditions": nc, "relationships": nr,
             })
-    return TEMPLATES.TemplateResponse(request, "regulations.html", {"rows": rows})
+    return TEMPLATES.TemplateResponse(request, "regulations.html", {"rows": rows, "page": pg})
 
 
 @router.get("/regulations/{regulation_id}")

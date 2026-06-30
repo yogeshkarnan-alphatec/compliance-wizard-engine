@@ -22,7 +22,11 @@ from config import DATABASE_URL  # noqa: E402
 from db.models import Base  # noqa: E402
 
 config = context.config
-config.set_main_option("sqlalchemy.url", DATABASE_URL)
+# ConfigParser treats '%' as interpolation syntax, so a URL-encoded password
+# (e.g. %2A, %23 from the Supabase pooler) must have its '%' doubled here. The
+# offline path below passes DATABASE_URL straight to context.configure, which
+# does NOT interpolate, so it keeps the raw URL.
+config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
