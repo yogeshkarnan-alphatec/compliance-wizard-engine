@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}All regulations{% endblock %}
 {% block content %}
-<h1>All regulations ({{ rows|length }})</h1>
+<h1>All regulations ({{ page.total }})</h1>
 <p class="muted">Everything loaded — click a row for the full extracted record. The
 <a href="/review">review queue</a> shows only items still needing a human.</p>
 <table>
@@ -26,4 +26,5 @@
     {% endfor %}
   </tbody>
 </table>
+{% include "_pagination.html" %}
 {% endblock %}
