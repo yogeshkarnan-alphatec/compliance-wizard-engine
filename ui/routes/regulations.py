@@ -7,6 +7,7 @@ data" surface; the queue at /review is only the items still needing a human.
 """
 
 from __future__ import annotations
+from db.enums import IngestionStatus
 
 from uuid import UUID
 
@@ -32,7 +33,15 @@ router = APIRouter()
 def regulations_index(request: Request):
     rows: list[dict] = []
     with session_scope() as s:
-        regs = s.execute(select(Regulation).order_by(Regulation.created_at.desc())).scalars().all()
+        # regs = s.execute(select(Regulation).order_by(Regulation.created_at.desc())).scalars().all()
+
+        # Option A — exclude stubs explicitly (keeps queued/processing/ingested/failed visible)
+        regs = s.execute(
+            select(Regulation)
+            .where(Regulation.ingestion_status != IngestionStatus.STUB.value)
+            .order_by(Regulation.created_at.desc())
+        ).scalars().all()
+
         for reg in regs:
             nf = s.scalar(select(func.count()).select_from(RegulationField).where(RegulationField.regulation_id == reg.id))
             nc = s.scalar(select(func.count()).select_from(ApplicabilityCondition).where(ApplicabilityCondition.regulation_id == reg.id))
