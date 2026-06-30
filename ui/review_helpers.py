@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime, timezone
 
 from config import CONFIDENCE_THRESHOLD
 
@@ -137,3 +138,46 @@ def condition_summary(cond) -> str:
         rhs = ""
     unit = f" {cond.unit}" if cond.unit else ""
     return f"{name} {op} {rhs}{unit}".strip()
+
+
+# --- Timestamps -------------------------------------------------------------
+# Every review row already carries a server-set `created_at` (UTC, timestamptz):
+# the moment the pipeline persisted that item — i.e. when it appeared in the
+# queue. The queue tables show the absolute UTC time with the human-friendly age
+# in a hover tooltip; formatting it here keeps every review surface identical.
+
+def _as_utc(dt: datetime) -> datetime:
+    """Normalize to tz-aware UTC (a naive value is treated as already-UTC)."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def format_timestamp(dt: datetime | None) -> str:
+    """Absolute UTC stamp for the cell, e.g. '2026-06-22 14:30 UTC'."""
+    if dt is None:
+        return ""
+    return _as_utc(dt).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _plural(n: int, unit: str) -> str:
+    return f"{n} {unit}{'' if n == 1 else 's'} ago"
+
+
+def relative_age(dt: datetime | None) -> str:
+    """Human-friendly age for the tooltip, e.g. '3 days ago'. Coarse by design."""
+    if dt is None:
+        return ""
+    seconds = (datetime.now(timezone.utc) - _as_utc(dt)).total_seconds()
+    if seconds < 60:
+        return "just now"  # also covers small clock skew / future-dated rows
+    minutes, hours, days = seconds / 60, seconds / 3600, seconds / 86400
+    if minutes < 60:
+        return _plural(int(minutes), "minute")
+    if hours < 24:
+        return _plural(int(hours), "hour")
+    if days < 30:
+        return _plural(int(days), "day")
+    if days < 365:
+        return _plural(int(days / 30), "month")
+    return _plural(int(days / 365), "year")
