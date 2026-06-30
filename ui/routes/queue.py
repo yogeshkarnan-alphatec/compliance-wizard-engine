@@ -17,6 +17,7 @@ from db.enums import ReviewStatus
 from db.models import ApplicabilityCondition, Regulation, RegulationField
 from db.session import session_scope
 from ui.deps import TEMPLATES
+from ui.pagination import DEFAULT_PER_PAGE, build_page
 from ui.review_helpers import (
     condition_summary,
     derive_condition_reason,
@@ -31,7 +32,14 @@ router = APIRouter()
 
 
 @router.get("/review")
-def queue_view(request: Request, jurisdiction: str = "", min_conf: float = 0.0, max_conf: float = 1.0):
+def queue_view(
+    request: Request,
+    jurisdiction: str = "",
+    min_conf: float = 0.0,
+    max_conf: float = 1.0,
+    page: int = 1,
+    per_page: int = DEFAULT_PER_PAGE,
+):
     items: list[dict] = []
     with session_scope() as s:
         fq = (
@@ -77,10 +85,15 @@ def queue_view(request: Request, jurisdiction: str = "", min_conf: float = 0.0, 
             })
 
     items.sort(key=lambda i: i["confidence"])  # lowest confidence first
+    pg = build_page(page, per_page, len(items))
+    page_items = items[pg.offset:pg.offset + pg.per_page]
     return TEMPLATES.TemplateResponse(
         request,
         "queue.html",
-        {"items": items, "jurisdiction": jurisdiction, "min_conf": min_conf, "max_conf": max_conf},
+        {
+            "items": page_items, "page": pg,
+            "jurisdiction": jurisdiction, "min_conf": min_conf, "max_conf": max_conf,
+        },
     )
 
 

@@ -12,24 +12,32 @@ from uuid import UUID
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from db.enums import ReviewStatus
 from db.models import HsNomenclature, HsRegulationMap, Regulation
 from db.session import session_scope
 from ui.deps import TEMPLATES
+from ui.pagination import DEFAULT_PER_PAGE, build_page
 
 router = APIRouter()
 
 
 @router.get("/review/hs-mapping")
-def hs_review_view(request: Request):
+def hs_review_view(request: Request, page: int = 1, per_page: int = DEFAULT_PER_PAGE):
     rows: list[dict] = []
     with session_scope() as s:
+        total = s.scalar(
+            select(func.count()).select_from(HsRegulationMap)
+            .where(HsRegulationMap.review_status == ReviewStatus.PENDING.value)
+        ) or 0
+        pg = build_page(page, per_page, total)
         pending = s.execute(
             select(HsRegulationMap, Regulation)
             .join(Regulation, HsRegulationMap.regulation_id == Regulation.id)
             .where(HsRegulationMap.review_status == ReviewStatus.PENDING.value)
+            .order_by(HsRegulationMap.confidence, HsRegulationMap.id)
+            .offset(pg.offset).limit(pg.per_page)
         ).all()
         for hmap, reg in pending:
             heading = (hmap.hs_code or "")[:6]
@@ -44,7 +52,7 @@ def hs_review_view(request: Request):
                 "match_type": hmap.match_type,
                 "candidates": [{"code": c, "desc": d} for c, d in candidates],
             })
-    return TEMPLATES.TemplateResponse(request, "hs_review.html", {"rows": rows})
+    return TEMPLATES.TemplateResponse(request, "hs_review.html", {"rows": rows, "page": pg})
 
 
 @router.post("/review/hs-mapping/{map_id}")
