@@ -16,14 +16,14 @@
   <button class="secondary" type="submit">Bulk approve</button>
 </form>
 
-<p class="muted">Each row is something the pipeline wasn't sure about. A
-<strong>Data field</strong> is one extracted value (e.g. a certification body);
-an <strong>Applies-when rule</strong> is a condition that decides whether a
-regulation applies. Use the <strong>review →</strong> link to see the evidence and approve, edit, or reject.</p>
+<p class="muted">Each row is an item the pipeline routed to human review. A
+<strong>Field</strong> is a single extracted value (e.g. a certification body);
+an <strong>Applicability condition</strong> is a rule that determines whether a
+regulation applies. Open an item to review the evidence and approve, edit, or reject it.</p>
 
 <table>
   <thead>
-    <tr><th>Type</th><th>Regulation</th><th>Jur.</th><th>What</th><th>Value</th><th>Conf.</th><th>Why flagged</th><th>Appeared</th><th></th></tr>
+    <tr><th>Record type</th><th>Regulation</th><th>Jurisdiction</th><th>Field / Parameter</th><th>Extracted value</th><th>Confidence</th><th>Review reason</th><th>Appeared</th><th></th></tr>
   </thead>
   <tbody>
     {% for it in items %}
@@ -36,10 +36,10 @@ regulation applies. Use the <strong>review →</strong> link to see the evidence
       <td>{{ "%.2f"|format(it.confidence) }}</td>
       <td><span class="badge {{ it.reason }}" title="{{ it.reason_hint }}">{{ it.reason_label }}</span></td>
       <td class="ts" title="{{ it.appeared_rel }}">{{ it.appeared }}</td>
-      <td><a href="{{ it.link }}">review →</a></td>
+      <td><a href="{{ it.link }}">Review →</a></td>
     </tr>
     {% else %}
-    <tr><td colspan="9" class="muted">Nothing pending. 🎉</td></tr>
+    <tr><td colspan="9" class="muted">No items pending review.</td></tr>
     {% endfor %}
   </tbody>
 </table>
