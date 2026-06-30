@@ -24,8 +24,8 @@ _HS_RE = re.compile(r"^\d{6}(\d{2})?(\d{2})?$")
 # one place, rather than scattering copy through the templates.
 
 TYPE_LABELS: dict[str, str] = {
-    "field": "Data field",
-    "condition": "Applies-when rule",
+    "field": "Field",
+    "condition": "Applicability condition",
 }
 
 # slug -> (short label, what-it-means / what-to-do hint)
@@ -39,19 +39,19 @@ REASONS: dict[str, tuple[str, str]] = {
         "The extracted code isn't a valid 6/8/10-digit HS code — correct it or reject.",
     ),
     "unresolved_alias": (
-        "Unrecognized certification body",
+        "Unresolved certification body",
         "The named body couldn't be matched to a known one — pick the right body below.",
     ),
     "unstructured_condition": (
-        "Couldn't be parsed into a rule",
+        "Unstructured condition",
         "This clause stayed free-text, so the Wizard treats it as UNCERTAIN — structure it or approve as-is.",
     ),
     "unknown_parameter": (
-        "Unknown parameter",
+        "Unmapped parameter",
         "This parameter isn't in the controlled vocabulary yet — map it or add it.",
     ),
     "flagged": (
-        "Flagged for review",
+        "Validation flag",
         "Routed to review by a validation rule.",
     ),
 }
