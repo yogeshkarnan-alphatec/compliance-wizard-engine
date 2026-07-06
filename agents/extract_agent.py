@@ -20,6 +20,7 @@ from uuid import UUID
 import llm_client
 from config import EXTRACT_MAX_CHARS
 from schemas.common import ExtractedField
+from schemas.extra_audit import audit_unknown_keys, capture_dropped_keys
 from schemas.extract import ConformityRoute, ExtractOutput, RawApplicabilityCondition
 from schemas.read import ReadOutput
 
@@ -103,7 +104,10 @@ class ExtractAgent:
         prompt = self._build_prompt(read_output)
         resp = llm_client.complete(prompt, agent=self.name, job_id=job_id, json_mode=True)
         data = self._loads(resp.text)
-        return self._parse(data, job_id)
+        # _parse hand-picks known keys, so unknown ones are dropped here rather than by
+        # Pydantic. Bind the job/model context so those drops are audited, not silent.
+        with capture_dropped_keys(job_id=job_id, model=getattr(resp, "model", None), phase="extract"):
+            return self._parse(data, job_id)
 
     # --- prompt ------------------------------------------------------------
     def _build_prompt(self, read_output: ReadOutput) -> str:
@@ -183,7 +187,10 @@ class ExtractAgent:
 
     @staticmethod
     def _field(obj: object) -> ExtractedField | None:
-        if not isinstance(obj, dict) or obj.get("value") in (None, ""):
+        if not isinstance(obj, dict):
+            return None
+        audit_unknown_keys(ExtractedField, obj)
+        if obj.get("value") in (None, ""):
             return None
         try:
             return ExtractedField(
@@ -203,6 +210,7 @@ class ExtractAgent:
 
     def _parse(self, data: dict, job_id: UUID) -> ExtractOutput:
         kwargs: dict = {"job_id": job_id}
+        audit_unknown_keys(ExtractOutput, data)  # top-level keys outside the taxonomy
         summary = data.get("summary")
         kwargs["summary"] = str(summary).strip() if isinstance(summary, str) and summary.strip() else None
         for key in _SCALAR_FIELDS:
@@ -217,6 +225,7 @@ class ExtractAgent:
         for c in data.get("applicability_conditions", []) or []:
             if not isinstance(c, dict):
                 continue
+            audit_unknown_keys(RawApplicabilityCondition, c)
             try:
                 conds.append(
                     RawApplicabilityCondition(
@@ -239,6 +248,7 @@ class ExtractAgent:
         for r in data.get("conformity_routes", []) or []:
             if not isinstance(r, dict):
                 continue
+            audit_unknown_keys(ConformityRoute, r)
             mods = r.get("modules", [])
             try:
                 routes.append(

@@ -19,7 +19,8 @@ from pydantic import BaseModel, Field
 
 from agents.extract_agent import ExtractAgent, _ARRAY_FIELDS, _SCALAR_FIELDS, _SYSTEM as _EXTRACT_SYSTEM
 from agentic.context import PipelineState
-from agentic.model import chat_model
+from agentic.model import chat_model, configured_model_name
+from schemas.extra_audit import capture_dropped_keys, summarize_drops
 from schemas.extract import ExtractionResult
 from schemas.read import ReadOutput
 
@@ -107,15 +108,28 @@ def extract_node(state: PipelineState) -> dict:
     model = chat_model().with_structured_output(ExtractionResult, method="function_calling")
     chunks = _chunk_segments(state.get("segments", []), agent.max_chars)
     partials: list[ExtractionResult] = []
-    for chunk_segs in chunks:
-        read_out = ReadOutput(job_id=job_id, segments=chunk_segs, metadata_hints=hints)
-        prompt = agent._build_prompt(read_out) + feedback
-        partials.append(model.invoke(
-            [SystemMessage(content=_EXTRACT_SYSTEM), HumanMessage(content=prompt)]
-        ))
+    # extra="ignore" on the extraction models tolerates stray LLM keys instead of failing
+    # the job; capture_dropped_keys makes every drop visible (audit log + pipeline trace).
+    with capture_dropped_keys(job_id=job_id, model=configured_model_name(), phase="extract") as drops:
+        for chunk_segs in chunks:
+            read_out = ReadOutput(job_id=job_id, segments=chunk_segs, metadata_hints=hints)
+            prompt = agent._build_prompt(read_out) + feedback
+            partials.append(model.invoke(
+                [SystemMessage(content=_EXTRACT_SYSTEM), HumanMessage(content=prompt)]
+            ))
     result = partials[0] if len(partials) == 1 else _merge_extractions(partials)
     extract_out = result.to_extract_output(job_id)
     attempts = state.get("extract_attempts", 0) + 1
+    log_lines = [
+        f"extract (attempt {attempts}, {len(chunks)} chunk(s)): "
+        f"{len(extract_out.regulation_mentions)} mentions, "
+        f"{len(extract_out.applicability_conditions)} conditions"
+    ]
+    if drops.events:
+        n_keys = sum(len(e["dropped_keys"]) for e in drops.events)
+        log_lines.append(
+            f"extract: tolerated {n_keys} unexpected LLM key(s) [{summarize_drops(drops.events)}]"
+        )
     return {
         "extract_output": extract_out,
         "extract_attempts": attempts,
@@ -126,11 +140,7 @@ def extract_node(state: PipelineState) -> dict:
         "mapping_output": None,
         "validation_output": None,
         "critic_decision": None,
-        "log": state.get("log", []) + [
-            f"extract (attempt {attempts}, {len(chunks)} chunk(s)): "
-            f"{len(extract_out.regulation_mentions)} mentions, "
-            f"{len(extract_out.applicability_conditions)} conditions"
-        ],
+        "log": state.get("log", []) + log_lines,
     }
 
 
