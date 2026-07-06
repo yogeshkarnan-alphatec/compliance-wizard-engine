@@ -16,6 +16,7 @@ from ui.routes import (
     condition_detail,
     detail,
     hs_review,
+    imports,
     queue,
     regulations,
     relationships,
@@ -27,6 +28,7 @@ app = FastAPI(title="Compliance Wizard — Review UI")
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
 app.include_router(queue.router)
+app.include_router(imports.router)
 app.include_router(regulations.router)
 app.include_router(detail.router)
 app.include_router(condition_detail.router)
