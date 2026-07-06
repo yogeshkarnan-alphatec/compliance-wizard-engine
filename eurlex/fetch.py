@@ -11,6 +11,7 @@ Two entry points:
 import json
 import time
 from datetime import datetime, timezone
+from html.parser import HTMLParser
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -20,6 +21,12 @@ from .rdf import find_expression_uri
 
 CELLAR_RESOURCE = "http://publications.europa.eu/resource/celex/{celex}"
 TEXT_TAGS = ("p", "li", "h1", "h2", "h3", "h4")
+
+# Manifestation formats tried, in order, at the expression URI. XHTML is preferred
+# (well-formed, parses as XML); older OJ documents (pre-~2004, e.g. 31993L0068) have
+# no XHTML manifestation and 404, so we fall back to the text/html manifestation.
+_XHTML_ACCEPT = "application/xhtml+xml"
+_HTML_ACCEPT = "text/html"
 
 
 def _extract_text(xhtml_text):
@@ -37,6 +44,61 @@ def _extract_text(xhtml_text):
             if text:
                 paragraphs.append(text)
     return "\n".join(paragraphs)
+
+
+class _HTMLTextExtractor(HTMLParser):
+    """Flatten non-XML HTML to block text, one logical block per line.
+
+    Used for the text/html fallback: the OJ HTML served for older documents is not
+    well-formed XML (unbalanced/unclosed <p> tags are common), so ElementTree can't
+    parse it and a nesting-depth approach mis-groups it. Instead we insert a line break
+    at every block-level boundary and keep all text between them, then drop empty lines.
+    This is robust to malformed nesting and preserves paragraph granularity (e.g. each
+    'Article N' lands on its own line) so the downstream segmenter can split on headings.
+    """
+
+    _BREAK = set(TEXT_TAGS) | {"br", "div", "tr", "table"}
+    _SKIP = {"script", "style", "head"}  # non-content: never emit their text
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self._parts: list[str] = []
+        self._skip = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self._SKIP:
+            self._skip += 1
+        elif tag in self._BREAK:
+            self._parts.append("\n")
+
+    def handle_startendtag(self, tag, attrs):  # self-closing, e.g. <br/>
+        if tag in self._BREAK:
+            self._parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in self._SKIP and self._skip > 0:
+            self._skip -= 1
+        elif tag in self._BREAK:
+            self._parts.append("\n")
+
+    def handle_data(self, data):
+        if self._skip == 0:
+            self._parts.append(data)
+
+    @property
+    def text(self) -> str:
+        lines = [ln.strip() for ln in "".join(self._parts).splitlines()]
+        return "\n".join(ln for ln in lines if ln)
+
+
+def _extract_html_text(html_text):
+    """Extract block text from a non-XML HTML manifestation. Returns None if nothing found."""
+    parser = _HTMLTextExtractor()
+    try:
+        parser.feed(html_text)
+    except Exception:  # noqa: BLE001 — malformed HTML: caller falls back to raw text
+        return None
+    return parser.text or None
 
 
 def get_document(celex, language="ENG", session=None, expression_uri=None):
@@ -75,21 +137,30 @@ def get_document(celex, language="ENG", session=None, expression_uri=None):
             return None
         time.sleep(1)  # polite delay before the next request
 
-    # Step 2: fetch the XHTML manifestation from the expression URI.
-    doc = http.get(
-        expression_uri,
-        headers={"Accept": "application/xhtml+xml"},
-        allow_redirects=True,
-        timeout=60,
-    )
-    if doc.status_code != 200:
-        print(f"  [{celex}] XHTML fetch failed: HTTP {doc.status_code}")
+    # Step 2: fetch the manifestation from the expression URI. Prefer XHTML; fall back
+    # to text/html for older documents that have no XHTML manifestation (which 404).
+    doc = None
+    fmt = None
+    for accept in (_XHTML_ACCEPT, _HTML_ACCEPT):
+        resp = http.get(
+            expression_uri,
+            headers={"Accept": accept},
+            allow_redirects=True,
+            timeout=60,
+        )
+        if resp.status_code == 200:
+            doc, fmt = resp, accept
+            break
+        print(f"  [{celex}] {accept} fetch failed: HTTP {resp.status_code}")
+    if doc is None:
         return None
 
-    # Step 3: extract text (fall back to raw XHTML if parsing fails).
-    text = _extract_text(doc.text)
-    if text is None:
-        text = doc.text
+    # Step 3: extract text. XHTML parses as XML; the HTML fallback is not well-formed
+    # XML, so use the HTML parser. Both fall back to raw response text as a last resort.
+    if fmt == _XHTML_ACCEPT:
+        text = _extract_text(doc.text) or doc.text
+    else:
+        text = _extract_html_text(doc.text) or doc.text
 
     return {
         "text": text,
