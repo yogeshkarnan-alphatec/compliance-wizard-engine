@@ -84,6 +84,13 @@ FILE_STORE_PATH: Path = Path(_env("FILE_STORE_PATH", "./file_store"))
 
 # --- EUR-Lex / CELLAR ------------------------------------------------------
 EURLEX_API_BASE: str = _env("EURLEX_API_BASE", "https://eur-lex.europa.eu/")
+# Public CELLAR SPARQL endpoint (no API key) used by the Import search to look up
+# directives by title. Override only if the endpoint host changes.
+EURLEX_SPARQL_ENDPOINT: str = _env(
+    "EURLEX_SPARQL_ENDPOINT", "http://publications.europa.eu/webapi/rdf/sparql"
+)
+# Upper bound on rows returned by one title search.
+EURLEX_SEARCH_LIMIT: int = int(_env("EURLEX_SEARCH_LIMIT", "25"))
 
 # --- Worker ----------------------------------------------------------------
 WORKER_POLL_INTERVAL_SECONDS: int = int(_env("WORKER_POLL_INTERVAL_SECONDS", "5"))

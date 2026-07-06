@@ -12,6 +12,7 @@ from .rdf import (
     extract_metadata,
     celex_from_uri,
 )
+from .search import search_documents
 
 __all__ = [
     "get_document",
@@ -20,4 +21,5 @@ __all__ = [
     "extract_relationships",
     "extract_metadata",
     "celex_from_uri",
+    "search_documents",
 ]

@@ -112,6 +112,12 @@ def _persist(job: dict, v: ValidationOutput, fetch: FetchEnrichmentOutput) -> UU
         if reg is None:
             reg = Regulation(source_id=v.regulation_source_id, created_by="pipeline")
             s.add(reg)
+        elif reg.created_by == "resolution_engine":
+            # This directive existed only as a resolution-engine stub (a cross-reference
+            # placeholder). The pipeline is now ingesting it for real, so claim provenance
+            # as 'pipeline' — matching a freshly-ingested directive rather than leaving it
+            # looking stub-originated after it carries full extracted content.
+            reg.created_by = "pipeline"
         reg.jurisdiction = v.jurisdiction
         reg.title = hints.get("title") or reg.title
         reg.summary = v.summary or reg.summary

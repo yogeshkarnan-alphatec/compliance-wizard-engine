@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Import directive{% endblock %}
+{% block content %}
+<h1>Import a directive</h1>
+<p class="muted">Search EU legislation by name, then ingest the one you need. The
+selected document is queued for the pipeline, which fetches it from EUR-Lex and
+extracts its parameters. Processing runs in the background worker.</p>
+
+{% if msg %}<div class="why">{{ msg }}</div>{% endif %}
+
+<form class="filters" method="get" action="/import">
+  <div style="flex:1; min-width:280px;">
+    <label>Directive name<br>
+      <input name="q" value="{{ q }}" placeholder="e.g. machinery safety" style="width:100%;" autofocus>
+    </label>
+  </div>
+  <button type="submit">Search</button>
+</form>
+
+{% if error %}
+<div class="why" style="border-left-color:#dc2626;">Search failed: {{ error }}</div>
+{% endif %}
+
+{% if q and not error %}
+<p class="muted">{{ results|length }} result{{ '' if results|length == 1 else 's' }} for “{{ q }}”
+  (EU Directives, Regulations &amp; Decisions, newest first).</p>
+<table>
+  <thead>
+    <tr><th>CELEX</th><th>Type</th><th>Title</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for r in results %}
+    <tr>
+      <td>{{ r.celex }}</td>
+      <td>{{ r.document_type }}</td>
+      <td>{{ r.title }}</td>
+      <td>
+        <form method="post" action="/import/enqueue">
+          <input type="hidden" name="celex" value="{{ r.celex }}">
+          <input type="hidden" name="title" value="{{ r.title }}">
+          <input type="hidden" name="q" value="{{ q }}">
+          <button type="submit">Ingest →</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="muted">No matching legislation. Try fewer or different words.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
