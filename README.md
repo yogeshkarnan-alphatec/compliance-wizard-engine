@@ -158,6 +158,15 @@ All env vars and thresholds live in one place: [config.py](config.py). See
 - **Applicability conditions** store structured (`value_min/max/enum/bool`) *and* a raw
   fallback (`raw_text` + `is_structured=False`), so ambiguous clauses become a wizard
   `UNCERTAIN` result rather than being dropped.
+- **Tolerant-but-audited extraction** — the models the LLM fills directly (`ExtractedField`,
+  `RawApplicabilityCondition`, `ConformityRoute`, `ExtractionResult`) use `extra="ignore"`,
+  so a stray key the model invents (e.g. copying `source_segment_index` onto a condition)
+  is dropped instead of failing the whole extraction job. But tolerance never becomes a
+  *silent* under-extraction: every dropped key is recorded — a WARNING on the
+  `compliance.extract.dropped_keys` logger plus a one-line summary in the pipeline trace,
+  tagged with the model, job id, and key name. (`ExtractOutput`, built internally rather
+  than from raw LLM output, deliberately stays `extra="forbid"`.) See
+  [schemas/extra_audit.py](schemas/extra_audit.py).
 - **DB is the source of truth** for the controlled vocabularies; `data/*.json` are seeds
   loaded by `scripts/seed_reference_data.py`, and the Review UI extends them live.
 - **Enum columns** are `VARCHAR(32) + CHECK(col IN (...))` (functionally equivalent to the

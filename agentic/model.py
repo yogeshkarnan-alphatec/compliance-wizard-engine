@@ -17,6 +17,11 @@ from config import (
 )
 
 
+def configured_model_name() -> str:
+    """The model string the active provider will use — for audit/context labelling."""
+    return ANTHROPIC_MODEL if LLM_PROVIDER == "anthropic" else OPENAI_MODEL
+
+
 def chat_model(temperature: float = 0.0):
     """Return a LangChain chat model for the configured provider.
 
