@@ -17,13 +17,16 @@ from pathlib import Path
 
 from sqlalchemy import select
 
-from db.enums import JobStatus
+from db.enums import IngestionStatus, JobStatus
 from db.models import Job, Regulation
 from db.session import session_scope
 
 CATALOG = Path(__file__).resolve().parents[1] / "config" / "catalog.json"
 _DESCRIPTOR_TO_TYPE = {"L": "Directive", "R": "Regulation", "D": "Decision"}
-_ACTIVE = (JobStatus.QUEUED.value, JobStatus.PROCESSING.value, JobStatus.DONE.value)
+# A CELEX blocks a new ingest only if an ingest is currently in flight (queued/processing).
+# A prior *done* job does NOT block: a job can finish "done" having produced only a stub
+# (e.g. the old XHTML-404 fetch bug), and we must be able to re-ingest it for real.
+_IN_FLIGHT = (JobStatus.QUEUED.value, JobStatus.PROCESSING.value)
 
 
 def _load_catalog() -> dict[str, dict]:
@@ -44,10 +47,16 @@ def enqueue(celex: str, title: str | None = None) -> str:
         hints["document_type"] = _DESCRIPTOR_TO_TYPE[descriptor]
 
     with session_scope() as s:
-        if s.execute(select(Regulation.id).where(Regulation.source_id == celex)).first():
-            return f"skip {celex} (already a regulation)"
-        if s.execute(select(Job.id).where(Job.source_id == celex, Job.status.in_(_ACTIVE)).limit(1)).first():
-            return f"skip {celex} (already queued/processing/done)"
+        # Skip only if the directive is genuinely ingested (real extracted content). A
+        # 'stub' row is just a resolution-engine placeholder for a cross-reference, and a
+        # 'failed' row is an incomplete ingest — both must remain (re)ingestable.
+        reg_status = s.execute(
+            select(Regulation.ingestion_status).where(Regulation.source_id == celex)
+        ).scalar_one_or_none()
+        if reg_status == IngestionStatus.INGESTED.value:
+            return f"skip {celex} (already ingested)"
+        if s.execute(select(Job.id).where(Job.source_id == celex, Job.status.in_(_IN_FLIGHT)).limit(1)).first():
+            return f"skip {celex} (already queued/processing)"
         job = Job(source_id=celex, jurisdiction="EU", metadata_hints=hints, status=JobStatus.QUEUED.value)
         s.add(job)
         s.flush()
