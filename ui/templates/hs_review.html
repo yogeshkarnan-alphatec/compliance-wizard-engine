@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}HS / Applicability Review{% endblock %}
 {% block content %}
-<h1>HS / Applicability Review <span class="muted">({{ rows|length }} pending)</span></h1>
+<h1>HS / Applicability Review <span class="muted">({{ page.total }} pending)</span></h1>
 
 <table>
   <thead>
@@ -38,4 +38,5 @@
     {% endfor %}
   </tbody>
 </table>
+{% include "_pagination.html" %}
 {% endblock %}
