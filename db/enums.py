@@ -31,11 +31,22 @@ class Marking(StrEnum):
     UKCA = "UKCA"
 
 
-# --- Conformity assessment body --------------------------------------------
+# --- Conformity assessment / body / production -----------------------------
+class AssessmentType(StrEnum):
+    FIRST_PARTY = "1st-party"
+    THIRD_PARTY = "3rd-party"
+
+
 class BodyType(StrEnum):
     NOTIFIED = "notified"
     ACCREDITED = "accredited"
     CERTIFIED = "certified"
+
+
+class ProductionType(StrEnum):
+    SINGLE = "single"
+    BATCH = "batch"
+    SERIAL = "serial"
 
 
 # --- Applicability conditions ----------------------------------------------
