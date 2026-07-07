@@ -7,13 +7,9 @@ duplicated here; each node calls the same classes/functions the classic pipeline
 
 from __future__ import annotations
 
-import re
-
 from db.enums import RelationType
 from schemas.fetch import ApiSourcedRelationship, FetchEnrichmentOutput
 from agentic.context import PipelineState
-
-_CELEX = re.compile(r"^3\d{4}[A-Z]{1,2}\d{3,4}$")
 
 # EUR-Lex RDF predicate -> our typed relationship (see AGENTIC_REFACTOR_PLAN.md).
 _PREDICATE_TO_RELATION = {
