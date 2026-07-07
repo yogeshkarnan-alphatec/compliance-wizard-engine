@@ -34,22 +34,43 @@ router = APIRouter()
 def regulations_index(request: Request, page: int = 1, per_page: int = DEFAULT_PER_PAGE):
     rows: list[dict] = []
     with session_scope() as s:
-        # Count only the regulations that are not STUBs, since those are not displayed in the UI
-        total = s.scalar(
-            select(func.count()).select_from(Regulation)
-            .where(Regulation.ingestion_status != IngestionStatus.STUB.value)
-        ) or 0
+        # STUBs are placeholder nodes (created for cited-but-not-yet-ingested regs);
+        # they are not shown in this browser.
+        visible = Regulation.ingestion_status != IngestionStatus.STUB.value
+        total = s.scalar(select(func.count()).select_from(Regulation).where(visible)) or 0
         pg = build_page(page, per_page, total)
-        regs = s.execute(
-            select(Regulation).order_by(Regulation.created_at.desc())
-            # Count only the regulations that are not STUBs, since those are not displayed in the UI
-            .where(Regulation.ingestion_status != IngestionStatus.STUB.value)
+
+        # Child counts as correlated scalar subqueries, so the whole page is ONE query
+        # instead of three COUNT round-trips per row (was N+1 — ~3*per_page queries).
+        # Each subquery counts its child table filtered to the current regulations row.
+        n_fields = (
+            select(func.count()).select_from(RegulationField)
+            .where(RegulationField.regulation_id == Regulation.id)
+            .correlate(Regulation).scalar_subquery()
+        )
+        n_conditions = (
+            select(func.count()).select_from(ApplicabilityCondition)
+            .where(ApplicabilityCondition.regulation_id == Regulation.id)
+            .correlate(Regulation).scalar_subquery()
+        )
+        n_relationships = (
+            select(func.count()).select_from(RegulationRelationship)
+            .where(RegulationRelationship.source_reg_id == Regulation.id)
+            .correlate(Regulation).scalar_subquery()
+        )
+
+        result = s.execute(
+            select(
+                Regulation,
+                n_fields.label("nf"),
+                n_conditions.label("nc"),
+                n_relationships.label("nr"),
+            )
+            .where(visible)
+            .order_by(Regulation.created_at.desc())
             .offset(pg.offset).limit(pg.per_page)
-        ).scalars().all()
-        for reg in regs:
-            nf = s.scalar(select(func.count()).select_from(RegulationField).where(RegulationField.regulation_id == reg.id))
-            nc = s.scalar(select(func.count()).select_from(ApplicabilityCondition).where(ApplicabilityCondition.regulation_id == reg.id))
-            nr = s.scalar(select(func.count()).select_from(RegulationRelationship).where(RegulationRelationship.source_reg_id == reg.id))
+        ).all()
+        for reg, nf, nc, nr in result:
             rows.append({
                 "id": str(reg.id), "source_id": reg.source_id, "title": reg.title or "",
                 "document_type": reg.document_type or "", "jurisdiction": reg.jurisdiction or "",
