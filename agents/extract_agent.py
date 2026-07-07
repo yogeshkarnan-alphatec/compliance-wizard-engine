@@ -19,6 +19,7 @@ from uuid import UUID
 
 import llm_client
 from config import EXTRACT_MAX_CHARS
+from db.enums import AssessmentType, ProductionType
 from schemas.common import ExtractedField
 from schemas.extra_audit import audit_unknown_keys, capture_dropped_keys
 from schemas.extract import ConformityRoute, ExtractOutput, RawApplicabilityCondition
@@ -54,6 +55,14 @@ _ARRAY_FIELDS = (
     "certification_bodies",
     "exclusions",
 )
+
+# Closed-vocabulary scalar fields: the LLM must emit exactly one of the enum
+# values (or null). Sourced from db.enums so the extraction contract cannot
+# drift from the DB/normalization vocabulary those enums define.
+_CLOSED_VOCAB: dict[str, list[str]] = {
+    "conformity_assessment_type": [m.value for m in AssessmentType],
+    "production_type": [m.value for m in ProductionType],
+}
 
 
 class ExtractAgent:
@@ -154,6 +163,15 @@ class ExtractAgent:
             "genuinely categorical attributes."
             if vocab else ""
         )
+        # Constrain the closed-vocabulary scalars to their enum values so the LLM
+        # emits canonical strings (e.g. '3rd-party', 'serial') the Mapping agent
+        # then validates against the same enums.
+        closed_vocab_instr = (
+            "\n\nClosed-vocabulary scalar fields — set `value` to EXACTLY one of the "
+            "listed options (choose the closest match; use null if the document does "
+            "not state it):\n"
+            + "\n".join(f"  - {field}: one of {opts}" for field, opts in _CLOSED_VOCAB.items())
+        )
         lines.append(
             "\n\nReturn a JSON object with these keys. Scalar keys hold one object "
             "{value, reference, confidence, source_segment_index} or null. Array keys "
@@ -171,6 +189,7 @@ class ExtractAgent:
             "category-dependent (a table mapping equipment categories/classes to different "
             "allowed modules, e.g. category I→['A'], II→['A2','D1','E1']); leave [] when there "
             "is a single route (use the scalar conformity_* fields for that)."
+            + closed_vocab_instr
             + vocab_instr
             + f"\nDocument metadata hints: {json.dumps(hints, default=str)}"
         )
