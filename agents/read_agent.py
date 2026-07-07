@@ -1,9 +1,13 @@
 """Agent 1 — Read Agent.
 
-Layout-aware PDF text extraction with PyMuPDF (fitz). Deterministic, no LLM.
+Layout-aware document text extraction with PyMuPDF (fitz). Deterministic, no LLM.
 Splits the document into logical segments (article / annex / chapter / section)
 and preserves page numbers + a bounding box per segment so downstream provenance
 ("p.12, Art.3") and the Review UI's source-snippet view have real coordinates.
+
+Handles every format fitz opens natively (PDF, TXT, EPUB, XPS, …) through the
+layout-aware path; .docx (which fitz cannot open) is extracted via python-docx and
+run through the same text segmenter the EUR-Lex path uses.
 
 Why PyMuPDF: it preserves layout and per-block page coordinates, which pdfplumber
 does not expose as cleanly — and those coordinates are the spec's source-tracking
@@ -14,6 +18,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import UUID
 
 import fitz  # PyMuPDF
@@ -33,6 +38,12 @@ class ReadAgent:
     name = "read"
 
     def run(self, file_path: str, job_id: UUID, metadata_hints: dict | None = None) -> ReadOutput:
+        # .docx has no page layout for fitz to open, so extract its text and reuse the
+        # same line-based segmenter the EUR-Lex text path uses. Everything fitz can open
+        # natively (PDF, TXT, EPUB, XPS, …) goes through the layout-aware reader below.
+        if Path(file_path).suffix.lower() == ".docx":
+            return self._read_docx(file_path, job_id, metadata_hints)
+
         doc = fitz.open(file_path)
         try:
             blocks = self._extract_blocks(doc)
@@ -45,6 +56,25 @@ class ReadAgent:
             metadata_hints=metadata_hints or {},
             extracted_at=datetime.now(timezone.utc),
         )
+
+    def _read_docx(self, file_path: str, job_id: UUID, metadata_hints: dict | None) -> ReadOutput:
+        """Extract paragraph + table text from a .docx and segment it as plain text.
+
+        No page coordinates exist in a Word document, so provenance falls back to the
+        segment index (the text segmenter's default) rather than page/bbox.
+        """
+        from docx import Document
+
+        from agents.segment_text import segment_text
+
+        d = Document(file_path)
+        lines = [p.text.strip() for p in d.paragraphs if p.text and p.text.strip()]
+        for table in d.tables:
+            for row in table.rows:
+                cells = [c.text.strip() for c in row.cells if c.text and c.text.strip()]
+                if cells:
+                    lines.append(" | ".join(cells))
+        return segment_text("\n".join(lines), job_id, metadata_hints or {})
 
     def _extract_blocks(self, doc: "fitz.Document") -> list[dict]:
         """Flatten the document into ordered text blocks with page + bbox."""
