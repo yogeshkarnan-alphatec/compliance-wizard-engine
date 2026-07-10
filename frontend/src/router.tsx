@@ -7,6 +7,7 @@ import { PageLoader } from './components/ui/Loaders';
 const RegulationsPage = lazy(() => import('./pages/RegulationsPage'));
 const RegulationDetailPage = lazy(() => import('./pages/RegulationDetailPage'));
 const ImportPage = lazy(() => import('./pages/ImportPage'));
+const JobsPage = lazy(() => import('./pages/JobsPage'));
 const ReviewQueuePage = lazy(() => import('./pages/ReviewQueuePage'));
 const FieldDetailPage = lazy(() => import('./pages/FieldDetailPage'));
 const ConditionDetailPage = lazy(() => import('./pages/ConditionDetailPage'));
@@ -26,6 +27,7 @@ export const router = createBrowserRouter([
       { path: 'regulations', element: withSuspense(<RegulationsPage />) },
       { path: 'regulations/:id', element: withSuspense(<RegulationDetailPage />) },
       { path: 'import', element: withSuspense(<ImportPage />) },
+      { path: 'jobs', element: withSuspense(<JobsPage />) },
       { path: 'review', element: withSuspense(<ReviewQueuePage />) },
       { path: 'review/field/:id', element: withSuspense(<FieldDetailPage />) },
       { path: 'review/condition/:id', element: withSuspense(<ConditionDetailPage />) },

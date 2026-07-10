@@ -90,13 +90,6 @@ export default function ReviewQueuePage() {
 
   return (
     <section className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-white">Review Queue</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Pending fields and conditions, lowest confidence first. Click a row to review it.
-        </p>
-      </div>
-
       <Card>
         <div className="flex flex-wrap items-end gap-4">
           <label className="text-sm text-slate-600 dark:text-slate-300">

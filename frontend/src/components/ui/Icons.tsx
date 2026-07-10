@@ -38,6 +38,14 @@ export const QueueIcon = (p: IconProps) => (
   </svg>
 );
 
+export const JobsIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M12 2v3" />
+    <path d="M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z" />
+    <path d="M12 10v4l2.5 1.5" />
+  </svg>
+);
+
 export const HsIcon = (p: IconProps) => (
   <svg {...base(p)}>
     <path d="M4 9h16" />
@@ -82,5 +90,20 @@ export const XIcon = (p: IconProps) => (
   <svg {...base(p)}>
     <path d="M18 6 6 18" />
     <path d="m6 6 12 12" />
+  </svg>
+);
+
+export const MenuIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M4 6h16" />
+    <path d="M4 12h16" />
+    <path d="M4 18h16" />
+  </svg>
+);
+
+/** Chevron used for the collapse/expand toggle; rotate 180° for the other direction. */
+export const ChevronLeftIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="m15 18-6-6 6-6" />
   </svg>
 );

@@ -164,6 +164,35 @@ export interface ReviewQueueResponse {
   filters: { jurisdiction: string; min_conf: number; max_conf: number };
 }
 
+export interface JobError {
+  stage: string;
+  message: string;
+}
+
+export interface JobRow {
+  id: string;
+  label: string;
+  source_id: string;
+  jurisdiction: string;
+  status: string;
+  attempts: number;
+  error: JobError | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface JobStatusCount {
+  status: string;
+  count: number;
+}
+
+export interface JobsResponse {
+  rows: JobRow[];
+  page: PageMeta;
+  summary: JobStatusCount[];
+  status: string;
+}
+
 export interface CertBody {
   id: string;
   name: string;
@@ -288,6 +317,16 @@ export const api = {
     const fd = new FormData();
     fd.append('file', file);
     return http<MessageResponse>('/api/import/upload', { method: 'POST', body: fd });
+  },
+
+  // --- Jobs ----------------------------------------------------------------
+  jobs: (params: { page: number; perPage: number; status?: string }) => {
+    const q = new URLSearchParams({
+      page: String(params.page),
+      per_page: String(params.perPage),
+    });
+    if (params.status) q.set('status', params.status);
+    return http<JobsResponse>(`/api/jobs?${q.toString()}`);
   },
 
   // --- Review queue --------------------------------------------------------

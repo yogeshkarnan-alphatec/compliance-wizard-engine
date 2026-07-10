@@ -97,13 +97,6 @@ export default function HsReviewPage() {
 
   return (
     <section className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-white">HS / Applicability</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          HS↔regulation mappings flagged ambiguous or below threshold. Pick the correct code or resolve.
-        </p>
-      </div>
-
       {query.isLoading ? (
         <TableSkeleton rows={5} cols={4} />
       ) : query.isError ? (

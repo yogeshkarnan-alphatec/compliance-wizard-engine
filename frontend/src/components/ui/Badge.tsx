@@ -43,6 +43,19 @@ export function ReviewBadge({ status }: { status: string }) {
   return <Badge tone={tone}>{status}</Badge>;
 }
 
+/** Ingestion job status (queued / processing / done / failed). */
+export function JobStatusBadge({ status }: { status: string }) {
+  const tone: Tone =
+    status === 'done'
+      ? 'green'
+      : status === 'failed'
+        ? 'red'
+        : status === 'processing'
+          ? 'blue'
+          : 'amber';
+  return <Badge tone={tone}>{status}</Badge>;
+}
+
 /** Confidence value coloured by band. */
 export function ConfidenceBadge({ value }: { value: number }) {
   const tone: Tone = value >= 0.8 ? 'green' : value >= 0.5 ? 'amber' : 'red';

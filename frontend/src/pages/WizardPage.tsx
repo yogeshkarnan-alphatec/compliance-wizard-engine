@@ -35,13 +35,6 @@ export default function WizardPage() {
 
   return (
     <section className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-white">Compliance Wizard</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Enter an HS code and product attributes (JSON) to see which directives apply.
-        </p>
-      </div>
-
       <Card>
         <form onSubmit={submit} className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-[200px_1fr]">

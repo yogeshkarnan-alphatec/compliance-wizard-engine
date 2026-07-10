@@ -77,13 +77,7 @@ export default function RegulationsPage() {
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-white">All Data</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Every ingested regulation. Click a row for the full extracted record.
-          </p>
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
           <input
             type="checkbox"
