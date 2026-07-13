@@ -15,6 +15,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from logging_config import configure_logging
+from ui.api import api_router
 from ui.routes import (
     condition_detail,
     detail,
@@ -53,6 +54,9 @@ app.include_router(condition_detail.router)
 app.include_router(hs_review.router)
 app.include_router(relationships.router)
 app.include_router(wizard.router)
+
+# Additive JSON API for the React frontend (does not alter any HTML route above).
+app.include_router(api_router)
 
 
 @app.get("/")
