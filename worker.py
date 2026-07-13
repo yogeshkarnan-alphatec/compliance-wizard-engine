@@ -13,6 +13,7 @@ it, then run the (slow) pipeline outside any lock, then commit the final status.
 from __future__ import annotations
 
 import argparse
+import logging
 import time
 import traceback
 from datetime import datetime, timezone
@@ -24,6 +25,8 @@ from config import WORKER_BATCH_SIZE, WORKER_POLL_INTERVAL_SECONDS
 from db.enums import JobStatus
 from db.models import Job, JobError
 from db.session import session_scope
+
+log = logging.getLogger(__name__)
 
 
 def _claim_one() -> UUID | None:
@@ -48,8 +51,38 @@ def _claim_one() -> UUID | None:
         return job.id  # committed on scope exit → lock released, row marked processing
 
 
+def _record_failure(job_id: UUID, tb: str) -> None:
+    """Mark the job FAILED and store the traceback. Best-effort: if this DB write
+    itself fails — the exact case that used to crash the worker — log it and
+    return rather than propagate. A job stranded in PROCESSING is recoverable; a
+    dead worker is not."""
+    try:
+        with session_scope() as s:
+            job = s.get(Job, job_id)
+            if job is not None:
+                job.status = JobStatus.FAILED.value
+            s.add(JobError(job_id=job_id, stage="pipeline", error_message=tb.splitlines()[-1], traceback=tb))
+    except Exception:  # noqa: BLE001 — recording a failure must never kill the worker
+        log.exception("worker: could not record FAILED status for job %s", job_id)
+
+
+def _record_done(job_id: UUID) -> None:
+    """Mark the job DONE. Best-effort, for the same reason as _record_failure."""
+    try:
+        with session_scope() as s:
+            job = s.get(Job, job_id)
+            if job is not None:
+                job.status = JobStatus.DONE.value
+    except Exception:  # noqa: BLE001 — recording success must never kill the worker
+        log.exception("worker: could not record DONE status for job %s", job_id)
+
+
 def _process(job_id: UUID) -> None:
-    """Run the pipeline for one claimed job and record success/failure."""
+    """Run the pipeline for one claimed job and record its outcome.
+
+    This is the worker's per-job boundary and must never raise: a crash here would
+    strand the job in PROCESSING and, in the poll loop, take the whole worker down
+    with it. So both the pipeline run AND the outcome writes are guarded."""
     # Imported lazily so the worker module loads even before the pipeline exists,
     # and to keep the import graph (worker → pipeline → agents) lazy.
     from pipeline import run_pipeline
@@ -58,17 +91,11 @@ def _process(job_id: UUID) -> None:
         run_pipeline(job_id)
     except Exception:  # noqa: BLE001 — top-level boundary: never let a job kill the worker
         tb = traceback.format_exc()
-        with session_scope() as s:
-            job = s.get(Job, job_id)
-            if job is not None:
-                job.status = JobStatus.FAILED.value
-            s.add(JobError(job_id=job_id, stage="pipeline", error_message=tb.splitlines()[-1], traceback=tb))
+        log.error("worker: job %s failed in pipeline: %s", job_id, tb.splitlines()[-1])
+        _record_failure(job_id, tb)
         return
 
-    with session_scope() as s:
-        job = s.get(Job, job_id)
-        if job is not None:
-            job.status = JobStatus.DONE.value
+    _record_done(job_id)
 
 
 def run_batch(batch_size: int) -> int:
