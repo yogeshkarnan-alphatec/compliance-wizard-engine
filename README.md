@@ -22,11 +22,11 @@ Source Adapters ──writes one row──▶ jobs table ──worker.py polls+c
                                                                               │
                           ┌───────────────────────────────────────────────────┤
                           ▼                                                     ▼
-                  Resolution Engine                                       Review UI (FastAPI+Jinja2)
+                  Resolution Engine                                       Review UI (React + FastAPI)
                   - relationship_resolver  (typed edges, recursive CTE)   - queue / field detail
                   - hs_mapper              (HS ↔ regulation)              - HS & applicability review
                   - wizard_matcher         (the Wizard query engine)      - relationship table
-                                                                          - POST /wizard/query
+                                                                          - POST /api/wizard/query
 ```
 
 The **jobs table is the only connection** between acquisition and processing — adapters
@@ -60,11 +60,27 @@ changes to agents.
 
 ## Quick start
 
+### Option A — everything in Docker (recommended)
+
+One command builds the React UI, starts Postgres, and runs the combined UI + API
+container. Migrations and reference-data seeding happen automatically on startup.
+
+```bash
+# (optional) put your OPENAI_API_KEY in .env first — needed only to ingest documents
+docker compose up --build
+```
+
+Then open **http://localhost:8000** — the React Review UI and the JSON API (at
+`/api`, docs at `/docs`) are served by the same container. The ingestion worker runs
+in the background by default (set `RUN_WORKER=false` to disable it).
+
+### Option B — local dev (hot-reload UI)
+
 Prerequisites: Docker (for Postgres) and Python 3.11+.
 
 ```bash
 # 1. Start Postgres (the only datastore)
-docker compose up -d
+docker compose up -d postgres
 
 # 2. Set up Python
 python -m venv .venv && . .venv/bin/activate      # Windows: .\.venv\Scripts\Activate.ps1
@@ -82,8 +98,9 @@ python -m scripts.enqueue 32014L0034               # by CELEX (acquired via the 
 #   python -c "from adapters.upload import UploadAdapter; print(UploadAdapter().fetch('path/to/directive.pdf').id)"
 python worker.py --once                            # process one batch and exit (or: python worker.py)
 
-# 5. Launch the Review UI + Wizard
-uvicorn ui.main:app --reload                       # http://127.0.0.1:8000/review
+# 5. Launch the API + React Review UI
+uvicorn ui.main:app --reload                       # JSON API → http://127.0.0.1:8000/docs
+cd frontend && npm install && npm run dev          # React UI → http://127.0.0.1:5173
 ```
 
 ### Pipeline modes (agentic by default)
@@ -102,13 +119,13 @@ set `LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY`.
 
 Programmatic (JSON):
 ```bash
-curl -X POST http://127.0.0.1:8000/wizard/query \
+curl -X POST http://127.0.0.1:8000/api/wizard/query \
   -H 'Content-Type: application/json' \
   -d '{"hs_code": "8501.10", "product_attributes": {"rated_voltage_vdc": 24}}'
 ```
-Or use the form at `GET /wizard`. The query logic lives in
+Or use the Wizard page in the React UI. The query logic lives in
 [engine/wizard_matcher.py](engine/wizard_matcher.py); the endpoint is in
-[ui/routes/wizard.py](ui/routes/wizard.py).
+[ui/api/wizard.py](ui/api/wizard.py).
 
 ---
 
@@ -146,6 +163,76 @@ All env vars and thresholds live in one place: [config.py](config.py). See
 | `HS_INFERENCE_MAX_CODES` | `8` | max validated inferred HS codes stored per directive |
 | `FILE_STORE_PATH` | `./file_store` | where adapters save raw PDFs |
 | `WORKER_BATCH_SIZE` / `WORKER_POLL_INTERVAL_SECONDS` | `1` / `5` | worker tuning |
+| `WORKER_HEARTBEAT_SECONDS` | `60` | how often an idle worker logs an "alive" line |
+| `LOG_LEVEL` | `INFO` | log level applied by `configure_logging()` at every entrypoint |
+
+---
+
+## Health & observability
+
+Both processes report their health so failures don't only surface as `job_errors`
+rows. Nothing here is stored in the database or shown in the UI — health signals go
+to the two probe endpoints and to process logs (stdout), which is where an
+orchestrator or an operator reads them.
+
+### Health probes (the API)
+
+Two endpoints, mounted in [ui/routes/health.py](ui/routes/health.py):
+
+| Endpoint | Meaning | Response |
+|---|---|---|
+| `GET /health` | **Liveness** — the process is up. Does not touch the DB, so a DB blip never triggers a restart. | `200 {"status":"ok"}` |
+| `GET /ready` | **Readiness** — runs `SELECT 1`. Returns `503` when the DB is unreachable, so a load balancer holds traffic back during an outage and resumes automatically on recovery. | `200 {"status":"ready","database":"up"}` / `503 {"status":"unavailable","database":"down"}` |
+
+Check them by hand:
+
+```bash
+curl http://127.0.0.1:8000/health      # {"status":"ok"}
+curl http://127.0.0.1:8000/ready       # {"status":"ready","database":"up"}
+```
+
+In production these are wired to a container `HEALTHCHECK` or a k8s liveness/readiness
+probe — the orchestrator polls them and decides when to restart or route traffic.
+
+### Structured logging
+
+`configure_logging()` in [logging_config.py](logging_config.py) is the single logging
+setup. Both entrypoints call it — the FastAPI app (in its lifespan) and `worker.main`
+— so every module's `logging.getLogger(__name__)` writes through one handler with a
+consistent, timestamped format at `LOG_LEVEL`. It is idempotent (calling it twice does
+not duplicate log lines).
+
+Logs are written to **stdout**. How to read them:
+
+- **Dev** — run the process in the foreground and the lines print in your terminal:
+  ```bash
+  uvicorn ui.main:app                 # API: startup line + a line per request
+  python worker.py                    # worker: startup, heartbeat, per-job lines
+  ```
+- **Docker** — `docker logs -f <container>`
+- **systemd** — `journalctl -u <service> -f`
+- **k8s** — `kubectl logs -f <pod>`
+
+### Worker heartbeat
+
+An idle worker would otherwise be silent, so "healthy and waiting" looks identical to
+"hung". The poll loop logs a heartbeat every `WORKER_HEARTBEAT_SECONDS`:
+
+```
+INFO  __main__: Worker started (batch=1, poll=5s). Ctrl-C to stop.
+INFO  __main__: worker heartbeat: alive, 0 job(s) processed since start
+```
+
+It rides on the existing poll loop (no extra thread, no DB write) and reports the
+cumulative jobs processed since start. Lower the interval to watch it live:
+
+```bash
+WORKER_HEARTBEAT_SECONDS=3 python worker.py
+```
+
+> Job failures are separate: when a job fails the worker records the traceback to the
+> `job_errors` table (queryable, and surfaced via the Jobs API), while these logs and
+> probes cover process-level health.
 
 ---
 
@@ -158,6 +245,15 @@ All env vars and thresholds live in one place: [config.py](config.py). See
 - **Applicability conditions** store structured (`value_min/max/enum/bool`) *and* a raw
   fallback (`raw_text` + `is_structured=False`), so ambiguous clauses become a wizard
   `UNCERTAIN` result rather than being dropped.
+- **Tolerant-but-audited extraction** — the models the LLM fills directly (`ExtractedField`,
+  `RawApplicabilityCondition`, `ConformityRoute`, `ExtractionResult`) use `extra="ignore"`,
+  so a stray key the model invents (e.g. copying `source_segment_index` onto a condition)
+  is dropped instead of failing the whole extraction job. But tolerance never becomes a
+  *silent* under-extraction: every dropped key is recorded — a WARNING on the
+  `compliance.extract.dropped_keys` logger plus a one-line summary in the pipeline trace,
+  tagged with the model, job id, and key name. (`ExtractOutput`, built internally rather
+  than from raw LLM output, deliberately stays `extra="forbid"`.) See
+  [schemas/extra_audit.py](schemas/extra_audit.py).
 - **DB is the source of truth** for the controlled vocabularies; `data/*.json` are seeds
   loaded by `scripts/seed_reference_data.py`, and the Review UI extends them live.
 - **Enum columns** are `VARCHAR(32) + CHECK(col IN (...))` (functionally equivalent to the
@@ -187,7 +283,8 @@ agents/     the five pipeline agents
 engine/     resolution engine (relationships, HS mapping, wizard matcher)
 db/         SQLAlchemy models, enums, session, Alembic migrations
 schemas/    Pydantic v2 inter-agent contracts (the language seam)
-ui/         FastAPI + Jinja2 Review UI and the wizard endpoint
+ui/         FastAPI JSON API (backs the React frontend) + the wizard endpoint
+frontend/   React 18 + TypeScript + Vite SPA (the Review UI)
 scripts/    seed scripts (HS nomenclature, reference data)
 data/       seed JSON/CSV
 tests/      unit + integration tests (LLM mocked)

@@ -29,14 +29,17 @@ def mock_inference(monkeypatch):
 
 
 def test_infer_validates_against_nomenclature_and_caps_confidence(mock_inference):
-    # 850110 is in the seeded nomenclature (used across the suite); 999999 is not.
+    # 850110 is in the seeded nomenclature (used across the suite); 123456 is not.
+    # NB: don't use 999999 as the "invented" sentinel — it's a REAL CN catch-all
+    # ("Commodities not specified according to kind"), so it legitimately survives
+    # nomenclature validation and would make this test a false negative.
     mock_inference({"hs_codes": [
         {"code": "8501.10", "confidence": 0.95},   # valid → kept, confidence capped
-        {"code": "999999", "confidence": 0.9},     # not in nomenclature → dropped
+        {"code": "123456", "confidence": 0.9},     # not in nomenclature → dropped
     ]})
     out = infer_hs_codes("electric motors and generators", "low voltage equipment")
     codes = {c["hs_code"] for c in out}
-    assert "850110" in codes and "999999" not in codes
+    assert "850110" in codes and "123456" not in codes
     assert all(c["confidence"] <= hsi._MAX_INFERRED_CONFIDENCE for c in out)
 
 

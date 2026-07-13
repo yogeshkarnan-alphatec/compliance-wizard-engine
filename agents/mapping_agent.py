@@ -13,6 +13,7 @@ import re
 
 from sqlalchemy import select
 
+from db.enums import AssessmentType, ProductionType
 from db.models import CertificationBodyAlias, CertificationBody, ProductAttribute
 from db.session import session_scope
 from schemas.extract import ExtractOutput, RawApplicabilityCondition
@@ -122,9 +123,18 @@ class MappingAgent:
         if field_name == "marking":
             canonical = self._marking(ef.value) or ef.value.strip()
         elif field_name == "production_type":
-            canonical = self._enum_contains(ef.value, {"serial": ["serial"], "batch": ["batch"], "single": ["single", "one-off", "unit", "individual"]}) or ef.value.strip()
+            # Canonical targets sourced from ProductionType so the normalized value
+            # is always a valid enum member (single source of truth with Extract).
+            canonical = self._enum_contains(ef.value, {
+                ProductionType.SERIAL.value: ["serial"],
+                ProductionType.BATCH.value: ["batch"],
+                ProductionType.SINGLE.value: ["single", "one-off", "unit", "individual"],
+            }) or ef.value.strip()
         elif field_name == "conformity_assessment_type":
-            canonical = self._enum_contains(ef.value, {"3rd-party": ["third", "3rd", "notified body"], "1st-party": ["first", "1st", "self"]}) or ef.value.strip()
+            canonical = self._enum_contains(ef.value, {
+                AssessmentType.THIRD_PARTY.value: ["third", "3rd", "notified body"],
+                AssessmentType.FIRST_PARTY.value: ["first", "1st", "self"],
+            }) or ef.value.strip()
         elif field_name == "conformity_body_type":
             canonical = self._enum_contains(ef.value, {"notified": ["notified"], "accredited": ["accredit"], "certified": ["certif"]}) or ef.value.strip()
         elif field_name == "hs_code":

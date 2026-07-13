@@ -2,8 +2,10 @@
 
 The classic pipeline audits via llm_client; the agentic pipeline calls models through
 langchain, so we attach this handler in model.py to keep the spec's "every prompt +
-response persisted" guarantee. ``job_id`` is nullable on the table, so calls not tied
-to a specific job are still recorded. Auditing is best-effort and never raises.
+response persisted" guarantee. Successful calls are recorded on ``on_llm_end`` and
+FAILED calls on ``on_llm_error`` — both are persisted so failures are never invisible.
+``job_id`` is nullable on the table, so calls not tied to a specific job are still
+recorded. Auditing is best-effort and never raises.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 
 from db.models import LlmAuditLog
 from db.session import session_scope
+from llm_client import FAILED_RESPONSE_PREFIX
 
 _MAX = 100_000  # cap stored prompt/response length
 
@@ -63,6 +66,30 @@ class LlmAuditHandler(BaseCallbackHandler):
                     job_id=None, agent=self.agent, model=model,
                     prompt=prompt[:_MAX], response=str(text)[:_MAX],
                     prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
+                    latency_ms=latency_ms,
+                ))
+        except Exception:  # noqa: BLE001 — auditing must never break the pipeline
+            pass
+
+    def on_llm_error(self, error, *, run_id=None, **kwargs):
+        """Record a FAILED LLM/chat-model call.
+
+        Without this, a failed agentic call fired ``on_llm_error`` (never
+        ``on_llm_end``), so it was never written to llm_audit_log AND its entry
+        leaked in ``self._starts`` forever. We now pop the pending entry (fixing the
+        leak) and write a failure row, mirroring the classic pipeline's marker. This
+        callback also covers chat-model errors — langchain routes both through
+        ``on_llm_error``. Best-effort: never raises.
+        """
+        prompt, t0 = self._starts.pop(str(run_id), ("", time.perf_counter()))
+        latency_ms = int((time.perf_counter() - t0) * 1000)
+        response = f"{FAILED_RESPONSE_PREFIX} {type(error).__name__}: {error}"
+        try:
+            with session_scope() as s:
+                s.add(LlmAuditLog(
+                    job_id=None, agent=self.agent, model=None,
+                    prompt=prompt[:_MAX], response=response[:_MAX],
+                    prompt_tokens=None, completion_tokens=None,
                     latency_ms=latency_ms,
                 ))
         except Exception:  # noqa: BLE001 — auditing must never break the pipeline

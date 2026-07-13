@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
+
+from schemas.extra_audit import ExtraKeyAuditModel
 
 
-class ExtractedField(BaseModel):
+class ExtractedField(ExtraKeyAuditModel):
     """A single value pulled from the document, with its provenance.
 
     This is the atomic unit of extraction. Arrays in ExtractOutput are lists of
     these, so every element keeps its own reference + confidence — which is what
     the EAV regulation_fields table and the Review UI's field-level approval need.
     """
-
-    model_config = ConfigDict(extra="forbid")
 
     value: str
     reference: str  # minimal source location, e.g. "p.12, Art.3(1)" or "Annex II, §4"

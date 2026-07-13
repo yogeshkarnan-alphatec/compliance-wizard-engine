@@ -19,7 +19,9 @@ from uuid import UUID
 
 import llm_client
 from config import EXTRACT_MAX_CHARS
+from db.enums import AssessmentType, ProductionType
 from schemas.common import ExtractedField
+from schemas.extra_audit import audit_unknown_keys, capture_dropped_keys
 from schemas.extract import ConformityRoute, ExtractOutput, RawApplicabilityCondition
 from schemas.read import ReadOutput
 
@@ -53,6 +55,14 @@ _ARRAY_FIELDS = (
     "certification_bodies",
     "exclusions",
 )
+
+# Closed-vocabulary scalar fields: the LLM must emit exactly one of the enum
+# values (or null). Sourced from db.enums so the extraction contract cannot
+# drift from the DB/normalization vocabulary those enums define.
+_CLOSED_VOCAB: dict[str, list[str]] = {
+    "conformity_assessment_type": [m.value for m in AssessmentType],
+    "production_type": [m.value for m in ProductionType],
+}
 
 
 class ExtractAgent:
@@ -103,7 +113,10 @@ class ExtractAgent:
         prompt = self._build_prompt(read_output)
         resp = llm_client.complete(prompt, agent=self.name, job_id=job_id, json_mode=True)
         data = self._loads(resp.text)
-        return self._parse(data, job_id)
+        # _parse hand-picks known keys, so unknown ones are dropped here rather than by
+        # Pydantic. Bind the job/model context so those drops are audited, not silent.
+        with capture_dropped_keys(job_id=job_id, model=getattr(resp, "model", None), phase="extract"):
+            return self._parse(data, job_id)
 
     # --- prompt ------------------------------------------------------------
     def _build_prompt(self, read_output: ReadOutput) -> str:
@@ -150,6 +163,15 @@ class ExtractAgent:
             "genuinely categorical attributes."
             if vocab else ""
         )
+        # Constrain the closed-vocabulary scalars to their enum values so the LLM
+        # emits canonical strings (e.g. '3rd-party', 'serial') the Mapping agent
+        # then validates against the same enums.
+        closed_vocab_instr = (
+            "\n\nClosed-vocabulary scalar fields — set `value` to EXACTLY one of the "
+            "listed options (choose the closest match; use null if the document does "
+            "not state it):\n"
+            + "\n".join(f"  - {field}: one of {opts}" for field, opts in _CLOSED_VOCAB.items())
+        )
         lines.append(
             "\n\nReturn a JSON object with these keys. Scalar keys hold one object "
             "{value, reference, confidence, source_segment_index} or null. Array keys "
@@ -167,6 +189,7 @@ class ExtractAgent:
             "category-dependent (a table mapping equipment categories/classes to different "
             "allowed modules, e.g. category I→['A'], II→['A2','D1','E1']); leave [] when there "
             "is a single route (use the scalar conformity_* fields for that)."
+            + closed_vocab_instr
             + vocab_instr
             + f"\nDocument metadata hints: {json.dumps(hints, default=str)}"
         )
@@ -183,7 +206,10 @@ class ExtractAgent:
 
     @staticmethod
     def _field(obj: object) -> ExtractedField | None:
-        if not isinstance(obj, dict) or obj.get("value") in (None, ""):
+        if not isinstance(obj, dict):
+            return None
+        audit_unknown_keys(ExtractedField, obj)
+        if obj.get("value") in (None, ""):
             return None
         try:
             return ExtractedField(
@@ -203,6 +229,7 @@ class ExtractAgent:
 
     def _parse(self, data: dict, job_id: UUID) -> ExtractOutput:
         kwargs: dict = {"job_id": job_id}
+        audit_unknown_keys(ExtractOutput, data)  # top-level keys outside the taxonomy
         summary = data.get("summary")
         kwargs["summary"] = str(summary).strip() if isinstance(summary, str) and summary.strip() else None
         for key in _SCALAR_FIELDS:
@@ -217,6 +244,7 @@ class ExtractAgent:
         for c in data.get("applicability_conditions", []) or []:
             if not isinstance(c, dict):
                 continue
+            audit_unknown_keys(RawApplicabilityCondition, c)
             try:
                 conds.append(
                     RawApplicabilityCondition(
@@ -239,6 +267,7 @@ class ExtractAgent:
         for r in data.get("conformity_routes", []) or []:
             if not isinstance(r, dict):
                 continue
+            audit_unknown_keys(ConformityRoute, r)
             mods = r.get("modules", [])
             try:
                 routes.append(

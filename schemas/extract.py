@@ -15,12 +15,11 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from schemas.common import ExtractedField
+from schemas.extra_audit import ExtraKeyAuditModel
 
 
-class RawApplicabilityCondition(BaseModel):
+class RawApplicabilityCondition(ExtraKeyAuditModel):
     """A machine-evaluable condition as first extracted — not yet structured."""
-
-    model_config = ConfigDict(extra="forbid")
 
     parameter_name: str  # e.g. "rated_voltage_vac", "operating_pressure_bar", "intended_use"
     operator: str  # ">", "<", "in", "between", ... — normalized in Mapping
@@ -37,13 +36,11 @@ class RawApplicabilityCondition(BaseModel):
     raw_text: str  # original sentence, kept verbatim for review / fallback
 
 
-class ConformityRoute(BaseModel):
+class ConformityRoute(ExtraKeyAuditModel):
     """One row of a category-dependent conformity matrix (e.g. PED Annex II): which
     assessment modules are allowed for a given equipment hazard category. Used when a
     directive maps categories/classes to different module sets — which the flat scalar
     conformity_* fields below cannot represent."""
-
-    model_config = ConfigDict(extra="forbid")
 
     category: str  # hazard category/class, e.g. "I"|"II"|"III"|"IV" ("" if not category-based)
     modules: list[str] = Field(default_factory=list)  # allowed modules, e.g. ["A2", "D1", "E1"]
@@ -112,7 +109,7 @@ _EXTRACTION_FIELDS = (
 )
 
 
-class ExtractionResult(BaseModel):
+class ExtractionResult(ExtraKeyAuditModel):
     """The Extractor agent's structured ``output_type`` (OpenAI Agents SDK).
 
     Identical taxonomy to ExtractOutput but without the infra fields. Using a
@@ -122,8 +119,8 @@ class ExtractionResult(BaseModel):
     canonical ExtractOutput with ``to_extract_output(job_id)``.
     """
 
-    model_config = ConfigDict(extra="forbid")
-
+    # extra="ignore" (via ExtraKeyAuditModel): a stray key the LLM adds is dropped-
+    # with-audit instead of failing the whole extraction. See schemas/extra_audit.py.
     summary: str | None = None
     scope_description: ExtractedField | None = None
     scope_params: list[ExtractedField] = Field(default_factory=list)
