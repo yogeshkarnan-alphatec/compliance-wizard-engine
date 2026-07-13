@@ -21,10 +21,15 @@ from uuid import UUID
 
 from sqlalchemy import select
 
-from config import WORKER_BATCH_SIZE, WORKER_POLL_INTERVAL_SECONDS
+from config import (
+    WORKER_BATCH_SIZE,
+    WORKER_HEARTBEAT_SECONDS,
+    WORKER_POLL_INTERVAL_SECONDS,
+)
 from db.enums import JobStatus
 from db.models import Job, JobError
 from db.session import session_scope
+from logging_config import configure_logging
 
 log = logging.getLogger(__name__)
 
@@ -111,6 +116,8 @@ def run_batch(batch_size: int) -> int:
 
 
 def main() -> None:
+    configure_logging()
+
     # Enable LangSmith tracing if configured (no-op otherwise). Best-effort.
     try:
         from agentic.observability import setup_observability
@@ -126,12 +133,26 @@ def main() -> None:
 
     if args.once:
         n = run_batch(args.batch_size)
-        print(f"Processed {n} job(s).")
+        log.info("Processed %d job(s).", n)
         return
 
-    print(f"Worker started (batch={args.batch_size}, poll={WORKER_POLL_INTERVAL_SECONDS}s). Ctrl-C to stop.")
+    log.info(
+        "Worker started (batch=%d, poll=%ds). Ctrl-C to stop.",
+        args.batch_size, WORKER_POLL_INTERVAL_SECONDS,
+    )
+    # Heartbeat: emit an "alive" line every WORKER_HEARTBEAT_SECONDS so an idle
+    # worker still shows a pulse in the logs (otherwise silence is ambiguous —
+    # healthy-and-idle looks identical to hung). time.monotonic() is immune to
+    # clock adjustments, which is what we want for an interval.
+    processed_total = 0
+    last_heartbeat = time.monotonic()
     while True:
         n = run_batch(args.batch_size)
+        processed_total += n
+        now = time.monotonic()
+        if now - last_heartbeat >= WORKER_HEARTBEAT_SECONDS:
+            log.info("worker heartbeat: alive, %d job(s) processed since start", processed_total)
+            last_heartbeat = now
         if n == 0:
             time.sleep(WORKER_POLL_INTERVAL_SECONDS)
 
