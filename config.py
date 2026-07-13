@@ -95,6 +95,14 @@ EURLEX_SEARCH_LIMIT: int = int(_env("EURLEX_SEARCH_LIMIT", "25"))
 # --- Worker ----------------------------------------------------------------
 WORKER_POLL_INTERVAL_SECONDS: int = int(_env("WORKER_POLL_INTERVAL_SECONDS", "5"))
 WORKER_BATCH_SIZE: int = int(_env("WORKER_BATCH_SIZE", "1"))
+# How often the idle worker logs a heartbeat line so operators can see it is still
+# alive (and how many jobs it has processed) even when the queue is empty.
+WORKER_HEARTBEAT_SECONDS: int = int(_env("WORKER_HEARTBEAT_SECONDS", "60"))
+
+# --- Logging ---------------------------------------------------------------
+# Applied process-wide by logging_config.configure_logging() at each entrypoint
+# (the FastAPI lifespan and worker.main). Standard level name: DEBUG/INFO/WARNING/...
+LOG_LEVEL: str = _env("LOG_LEVEL", "INFO")
 
 # --- Reference data locations (seed files for DB-backed vocabularies) ------
 # These JSON files SEED the DB tables; the DB is the runtime source of truth.

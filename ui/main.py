@@ -6,15 +6,19 @@ Server-rendered Jinja2, no SPA framework, no build step (spec constraint). Run w
 
 from __future__ import annotations
 
+import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from logging_config import configure_logging
 from ui.routes import (
     condition_detail,
     detail,
+    health,
     hs_review,
     imports,
     queue,
@@ -23,10 +27,24 @@ from ui.routes import (
     wizard,
 )
 
-app = FastAPI(title="Compliance Wizard — Review UI")
+log = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Configure logging here (not at import) so it applies whichever server runs
+    # the app, and so the same configure_logging() the worker uses is the single
+    # place logging is set up.
+    configure_logging()
+    log.info("Review UI starting up")
+    yield
+
+
+app = FastAPI(title="Compliance Wizard — Review UI", lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
+app.include_router(health.router)
 app.include_router(queue.router)
 app.include_router(imports.router)
 app.include_router(regulations.router)
