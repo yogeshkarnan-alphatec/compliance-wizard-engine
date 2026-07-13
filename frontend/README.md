@@ -1,8 +1,8 @@
 # Compliance Wizard — React Frontend
 
 Modern SPA (React 18 + TypeScript + Vite + Tailwind) for the Compliance Wizard.
-Talks to the FastAPI backend's JSON API under `/api/*`. The existing server-rendered
-Jinja UI is unchanged and still available.
+Talks to the FastAPI backend's JSON API under `/api/*`. This is the sole Review UI
+(it replaced the original server-rendered Jinja UI).
 
 ## Stack
 
@@ -40,7 +40,7 @@ npm run build      # tsc typecheck + vite build -> dist/
 npm run preview    # preview the production build
 ```
 
-## Pages (full parity with the old Jinja UI)
+## Pages
 
 - `/import` — search EU-Lex + upload a document
 - `/regulations` — All Data: paginated, sortable table (stub filter toggle)
@@ -53,10 +53,9 @@ npm run preview    # preview the production build
 - `/wizard` — Compliance Wizard query
 - `*` — 404
 
-## Backend API (added, non-invasive)
+## Backend API
 
-New JSON endpoints in `ui/api/` (mounted in `ui/main.py`), reusing the same DB
-queries as the HTML routes without modifying them:
+JSON endpoints in `ui/api/` (mounted in `ui/main.py`):
 
 - `GET  /api/regulations?page=&per_page=&include_stubs=`  ·  `GET /api/regulations/{id}`
 - `GET  /api/import/search?q=`  ·  `POST /api/import/enqueue`  ·  `POST /api/import/upload`

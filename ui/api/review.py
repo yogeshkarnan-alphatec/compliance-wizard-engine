@@ -1,8 +1,7 @@
 """JSON API — the review queue and the field/condition detail review loops.
 
-Mirrors ui/routes/queue.py, ui/routes/detail.py and ui/routes/condition_detail.py
-but returns JSON and takes JSON bodies for actions. The existing HTML routes are
-untouched.
+Serves the React frontend: the pending-review queue plus the per-field and
+per-condition detail/action endpoints (approve / edit / resolve / reject).
 """
 
 from __future__ import annotations

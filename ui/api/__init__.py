@@ -1,9 +1,7 @@
 """JSON API for the React frontend.
 
-Additive layer: these endpoints live under /api and return JSON. They reuse the
-same DB models and query shapes as the server-rendered Jinja routes but never
-touch them — the classic HTML UI keeps working unchanged. The React SPA talks
-only to this router.
+These endpoints live under /api and return JSON. The React SPA talks only to this
+router — it is the sole UI layer.
 """
 
 from __future__ import annotations

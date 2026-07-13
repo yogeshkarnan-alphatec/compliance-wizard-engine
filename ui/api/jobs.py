@@ -5,8 +5,7 @@ Additive layer for the React SPA (mirrors the /api/* convention). Surfaces the
 worker drains through the extract → validate → ingest pipeline. This endpoint gives
 the frontend a window into that lifecycle (queued → processing → done | failed),
 per-status counts for a summary strip, and — for failed jobs — the latest error so a
-reviewer can see why a document never made it through. Read-only; the HTML routes
-are untouched.
+reviewer can see why a document never made it through. Read-only.
 """
 
 from __future__ import annotations

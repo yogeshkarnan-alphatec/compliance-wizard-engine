@@ -1,4 +1,4 @@
-"""JSON API — relationship-edge review for a regulation. Mirrors ui/routes/relationships.py."""
+"""JSON API — relationship-edge review for a regulation."""
 
 from __future__ import annotations
 

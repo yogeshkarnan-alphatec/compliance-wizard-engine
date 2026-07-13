@@ -1,7 +1,7 @@
 """JSON API — /api/import: search EU legislation, enqueue a CELEX, upload a document.
 
-Mirrors ui/routes/imports.py but returns JSON. The heavy lifting (search_documents,
-enqueue, UploadAdapter) is shared with the HTML route; only the transport differs.
+Returns JSON for the React frontend. The heavy lifting (search_documents, enqueue,
+UploadAdapter) lives in the shared adapters/engine layers; this module is transport.
 """
 
 from __future__ import annotations

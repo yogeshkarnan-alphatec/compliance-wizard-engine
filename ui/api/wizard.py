@@ -1,4 +1,4 @@
-"""JSON API — the Compliance Wizard query. Mirrors ui/routes/wizard.py's programmatic endpoint."""
+"""JSON API — the Compliance Wizard query endpoint."""
 
 from __future__ import annotations
 
