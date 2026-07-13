@@ -60,11 +60,27 @@ changes to agents.
 
 ## Quick start
 
+### Option A — everything in Docker (recommended)
+
+One command builds the React UI, starts Postgres, and runs the combined UI + API
+container. Migrations and reference-data seeding happen automatically on startup.
+
+```bash
+# (optional) put your OPENAI_API_KEY in .env first — needed only to ingest documents
+docker compose up --build
+```
+
+Then open **http://localhost:8000** — the React Review UI and the JSON API (at
+`/api`, docs at `/docs`) are served by the same container. The ingestion worker runs
+in the background by default (set `RUN_WORKER=false` to disable it).
+
+### Option B — local dev (hot-reload UI)
+
 Prerequisites: Docker (for Postgres) and Python 3.11+.
 
 ```bash
 # 1. Start Postgres (the only datastore)
-docker compose up -d
+docker compose up -d postgres
 
 # 2. Set up Python
 python -m venv .venv && . .venv/bin/activate      # Windows: .\.venv\Scripts\Activate.ps1
