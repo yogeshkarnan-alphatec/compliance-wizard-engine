@@ -163,6 +163,76 @@ All env vars and thresholds live in one place: [config.py](config.py). See
 | `HS_INFERENCE_MAX_CODES` | `8` | max validated inferred HS codes stored per directive |
 | `FILE_STORE_PATH` | `./file_store` | where adapters save raw PDFs |
 | `WORKER_BATCH_SIZE` / `WORKER_POLL_INTERVAL_SECONDS` | `1` / `5` | worker tuning |
+| `WORKER_HEARTBEAT_SECONDS` | `60` | how often an idle worker logs an "alive" line |
+| `LOG_LEVEL` | `INFO` | log level applied by `configure_logging()` at every entrypoint |
+
+---
+
+## Health & observability
+
+Both processes report their health so failures don't only surface as `job_errors`
+rows. Nothing here is stored in the database or shown in the UI — health signals go
+to the two probe endpoints and to process logs (stdout), which is where an
+orchestrator or an operator reads them.
+
+### Health probes (the API)
+
+Two endpoints, mounted in [ui/routes/health.py](ui/routes/health.py):
+
+| Endpoint | Meaning | Response |
+|---|---|---|
+| `GET /health` | **Liveness** — the process is up. Does not touch the DB, so a DB blip never triggers a restart. | `200 {"status":"ok"}` |
+| `GET /ready` | **Readiness** — runs `SELECT 1`. Returns `503` when the DB is unreachable, so a load balancer holds traffic back during an outage and resumes automatically on recovery. | `200 {"status":"ready","database":"up"}` / `503 {"status":"unavailable","database":"down"}` |
+
+Check them by hand:
+
+```bash
+curl http://127.0.0.1:8000/health      # {"status":"ok"}
+curl http://127.0.0.1:8000/ready       # {"status":"ready","database":"up"}
+```
+
+In production these are wired to a container `HEALTHCHECK` or a k8s liveness/readiness
+probe — the orchestrator polls them and decides when to restart or route traffic.
+
+### Structured logging
+
+`configure_logging()` in [logging_config.py](logging_config.py) is the single logging
+setup. Both entrypoints call it — the FastAPI app (in its lifespan) and `worker.main`
+— so every module's `logging.getLogger(__name__)` writes through one handler with a
+consistent, timestamped format at `LOG_LEVEL`. It is idempotent (calling it twice does
+not duplicate log lines).
+
+Logs are written to **stdout**. How to read them:
+
+- **Dev** — run the process in the foreground and the lines print in your terminal:
+  ```bash
+  uvicorn ui.main:app                 # API: startup line + a line per request
+  python worker.py                    # worker: startup, heartbeat, per-job lines
+  ```
+- **Docker** — `docker logs -f <container>`
+- **systemd** — `journalctl -u <service> -f`
+- **k8s** — `kubectl logs -f <pod>`
+
+### Worker heartbeat
+
+An idle worker would otherwise be silent, so "healthy and waiting" looks identical to
+"hung". The poll loop logs a heartbeat every `WORKER_HEARTBEAT_SECONDS`:
+
+```
+INFO  __main__: Worker started (batch=1, poll=5s). Ctrl-C to stop.
+INFO  __main__: worker heartbeat: alive, 0 job(s) processed since start
+```
+
+It rides on the existing poll loop (no extra thread, no DB write) and reports the
+cumulative jobs processed since start. Lower the interval to watch it live:
+
+```bash
+WORKER_HEARTBEAT_SECONDS=3 python worker.py
+```
+
+> Job failures are separate: when a job fails the worker records the traceback to the
+> `job_errors` table (queryable, and surfaced via the Jobs API), while these logs and
+> probes cover process-level health.
 
 ---
 
