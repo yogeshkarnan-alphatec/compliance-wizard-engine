@@ -27,7 +27,7 @@ router = APIRouter()
 
 # Formats the pipeline can read: PDF + everything fitz opens natively, plus .docx
 # (handled via python-docx in the Read agent). Anything else is rejected up front.
-_ALLOWED_UPLOAD_EXTS = {".pdf", ".txt", ".docx", ".epub", ".xps"}
+_ALLOWED_UPLOAD_EXTS = {".pdf", ".docx"}
 _SAFE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
 
 
