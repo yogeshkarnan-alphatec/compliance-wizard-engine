@@ -10,6 +10,8 @@ the interactive docs. Run with:
 
 from __future__ import annotations
 
+import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -17,10 +19,28 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from logging_config import configure_logging
+from ui import health
 from ui.api import api_router
 
-app = FastAPI(title="Compliance Wizard — API")
+log = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Configure logging here (not at import) so it applies whichever server runs
+    # the app, and so the same configure_logging() the worker uses is the single
+    # place logging is set up.
+    configure_logging()
+    log.info("API starting up")
+    yield
+
+
+app = FastAPI(title="Compliance Wizard — API", lifespan=lifespan)
+
+# Liveness/readiness probes at the root (not under /api) so orchestrators hit them
+# directly. Included before the SPA catch-all mount below so they always match.
+app.include_router(health.router)
 app.include_router(api_router)
 
 
