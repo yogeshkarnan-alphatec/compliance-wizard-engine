@@ -20,10 +20,19 @@ export default function ReviewQueuePage() {
   const page = Number(params.get('page') ?? '1');
   const perPage = Number(params.get('per_page') ?? '25');
   const jurisdiction = params.get('jurisdiction') ?? '';
+  const minConf = params.get('min_conf') ?? '';
+  const maxConf = params.get('max_conf') ?? '';
 
   const query = useQuery({
-    queryKey: ['review-queue', page, perPage, jurisdiction],
-    queryFn: () => api.reviewQueue({ page, perPage, jurisdiction: jurisdiction || undefined }),
+    queryKey: ['review-queue', page, perPage, jurisdiction, minConf, maxConf],
+    queryFn: () =>
+      api.reviewQueue({
+        page,
+        perPage,
+        jurisdiction: jurisdiction || undefined,
+        minConf: minConf ? Number(minConf) : undefined,
+        maxConf: maxConf ? Number(maxConf) : undefined,
+      }),
     placeholderData: keepPreviousData,
   });
 
@@ -42,6 +51,10 @@ export default function ReviewQueuePage() {
         col.accessor('regulation', {
           header: 'Regulation',
           cell: (c) => <span className="line-clamp-1 max-w-[16rem]">{c.getValue()}</span>,
+        }),
+        col.accessor('jurisdiction', {
+          header: 'Jurisdiction',
+          cell: (c) => c.getValue() || '—',
         }),
         col.accessor('name', { header: 'Item' }),
         col.accessor('value', {
@@ -87,6 +100,12 @@ export default function ReviewQueuePage() {
     params.set('page', '1');
     setParams(params, { replace: true });
   };
+  const setConf = (key: 'min_conf' | 'max_conf', v: string) => {
+    if (v) params.set(key, v);
+    else params.delete(key);
+    params.set('page', '1');
+    setParams(params, { replace: true });
+  };
 
   return (
     <section className="space-y-4">
@@ -100,6 +119,34 @@ export default function ReviewQueuePage() {
               onKeyDown={(e) => e.key === 'Enter' && setJurisdiction((e.target as HTMLInputElement).value.trim())}
               placeholder="e.g. EU"
               className="mt-1 block w-32 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            />
+          </label>
+          <label className="text-sm text-slate-600 dark:text-slate-300">
+            Min confidence
+            <input
+              type="number"
+              min={0}
+              max={1}
+              step={0.05}
+              defaultValue={minConf}
+              onBlur={(e) => setConf('min_conf', e.target.value.trim())}
+              onKeyDown={(e) => e.key === 'Enter' && setConf('min_conf', (e.target as HTMLInputElement).value.trim())}
+              placeholder="0.00"
+              className="mt-1 block w-24 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            />
+          </label>
+          <label className="text-sm text-slate-600 dark:text-slate-300">
+            Max confidence
+            <input
+              type="number"
+              min={0}
+              max={1}
+              step={0.05}
+              defaultValue={maxConf}
+              onBlur={(e) => setConf('max_conf', e.target.value.trim())}
+              onKeyDown={(e) => e.key === 'Enter' && setConf('max_conf', (e.target as HTMLInputElement).value.trim())}
+              placeholder="1.00"
+              className="mt-1 block w-24 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
             />
           </label>
           <div className="flex items-end gap-2">
@@ -134,7 +181,7 @@ export default function ReviewQueuePage() {
       </Card>
 
       {query.isLoading ? (
-        <TableSkeleton rows={8} cols={7} />
+        <TableSkeleton rows={8} cols={8} />
       ) : query.isError ? (
         <ErrorState message={(query.error as Error).message} onRetry={() => query.refetch()} />
       ) : query.data && query.data.items.length === 0 ? (

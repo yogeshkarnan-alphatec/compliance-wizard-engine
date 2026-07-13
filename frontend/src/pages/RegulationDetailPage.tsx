@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { api, type HsMap, type Relationship } from '../lib/api';
+import { api, type Condition, type HsMap, type Relationship } from '../lib/api';
 import { PageLoader } from '../components/ui/Loaders';
 import { ErrorState, Card } from '../components/ui/States';
 import { Badge, StatusBadge } from '../components/ui/Badge';
@@ -14,6 +14,19 @@ const SECTION_PAGE_SIZE = 8;
 
 function confTone(c: number) {
   return c >= 0.8 ? 'green' : c >= 0.5 ? 'amber' : 'red';
+}
+
+/** One-line constraint for a structured condition (operator + bounds/enum/bool + unit). */
+function conditionConstraint(c: Condition): string {
+  if (!c.structured) return 'unstructured';
+  const parts: string[] = [];
+  if (c.operator) parts.push(c.operator);
+  if (c.value_min != null) parts.push(`min=${c.value_min}`);
+  if (c.value_max != null) parts.push(`max=${c.value_max}`);
+  if (c.value_enum != null) parts.push(`in [${c.value_enum.join(', ')}]`);
+  if (c.value_bool != null) parts.push(`=${c.value_bool}`);
+  if (c.unit) parts.push(c.unit);
+  return parts.join(' ') || '—';
 }
 
 function MetaRow({ label, children }: { label: string; children: ReactNode }) {
@@ -64,6 +77,7 @@ function RelationshipsSection({ relationships, regId }: { relationships: Relatio
                 <th className={th}>Type</th>
                 <th className={th}>Target</th>
                 <th className={th}>Source</th>
+                <th className={th}>Conf.</th>
               </>
             }
           >
@@ -72,6 +86,9 @@ function RelationshipsSection({ relationships, regId }: { relationships: Relatio
                 <td className={td}>{r.relation_type}</td>
                 <td className={td}>{r.target}</td>
                 <td className={td}>{r.source}</td>
+                <td className={td}>
+                  <Badge tone={confTone(r.confidence)}>{r.confidence.toFixed(2)}</Badge>
+                </td>
               </tr>
             ))}
           </SectionTable>
@@ -97,6 +114,7 @@ function HsSection({ hs }: { hs: HsMap[] }) {
                 <th className={th}>HS code</th>
                 <th className={th}>Match</th>
                 <th className={th}>Conf.</th>
+                <th className={th}>Status</th>
               </>
             }
           >
@@ -107,6 +125,7 @@ function HsSection({ hs }: { hs: HsMap[] }) {
                 <td className={td}>
                   <Badge tone={confTone(h.confidence)}>{h.confidence.toFixed(2)}</Badge>
                 </td>
+                <td className={td}>{h.review_status}</td>
               </tr>
             ))}
           </SectionTable>
@@ -148,7 +167,7 @@ export default function RegulationDetailPage() {
           <StatusBadge status={reg.status} />
           {reg.document_type && <Badge tone="blue">{reg.document_type}</Badge>}
         </div>
-        {reg.title && <p className="mt-1 text-slate-600 dark:text-slate-300">{reg.title}</p>}
+        <p className="mt-1 text-slate-600 dark:text-slate-300">{reg.title || '(no title)'}</p>
       </div>
 
       <Card>
@@ -165,12 +184,14 @@ export default function RegulationDetailPage() {
             <span title={formatDateTime(reg.created_at)}>{formatDate(reg.created_at)}</span>
           </MetaRow>
           <MetaRow label="Summary">{reg.summary}</MetaRow>
-          <MetaRow label="File">{reg.file_path}</MetaRow>
+          <MetaRow label="File">{reg.file_path || '(acquired via EUR-Lex — no PDF)'}</MetaRow>
         </dl>
       </Card>
 
       <section className="space-y-2">
-        <h2 className="font-semibold text-slate-900 dark:text-white">Fields ({total_fields})</h2>
+        <h2 className="font-semibold text-slate-900 dark:text-white">
+          Fields ({field_groups.length} fields · {total_fields} values)
+        </h2>
         {field_groups.length === 0 ? (
           <p className="text-sm text-slate-500">No fields extracted.</p>
         ) : (
@@ -179,7 +200,8 @@ export default function RegulationDetailPage() {
               <>
                 <th className={th}>Field</th>
                 <th className={th}>Value(s)</th>
-                <th className={th}>Min conf.</th>
+                <th className={th}>Reference / segment</th>
+                <th className={th}>Conf.</th>
                 <th className={th}>Status</th>
               </>
             }
@@ -191,14 +213,70 @@ export default function RegulationDetailPage() {
                   {g.count > 1 && <span className="ml-1 text-xs text-slate-400">×{g.count}</span>}
                 </td>
                 <td className={td}>
-                  <ul className="space-y-0.5">
-                    {g.entries.map((e, i) => (
-                      <li key={i}>{e.value || '—'}</li>
-                    ))}
-                  </ul>
+                  {g.count === 1 ? (
+                    g.entries[0].value || '—'
+                  ) : (
+                    <>
+                      <ul className="list-disc space-y-0.5 pl-4">
+                        {g.entries.map((e, i) => (
+                          <li key={i}>
+                            {e.value || '—'}
+                            {e.review_status !== 'auto-approved' && (
+                              <span className="ml-1 text-xs text-slate-400">· {e.review_status}</span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                      <details className="mt-1">
+                        <summary className="cursor-pointer text-xs text-slate-500">
+                          show per-item detail ({g.count})
+                        </summary>
+                        <div className="mt-1 overflow-x-auto">
+                          <table className="min-w-full text-xs">
+                            <thead className="text-slate-500">
+                              <tr className="text-left">
+                                <th className="py-1 pr-3 font-medium">Value</th>
+                                <th className="py-1 pr-3 font-medium">Reference</th>
+                                <th className="py-1 pr-3 font-medium">Seg</th>
+                                <th className="py-1 pr-3 font-medium">Conf.</th>
+                                <th className="py-1 font-medium">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {g.entries.map((e, i) => (
+                                <tr key={i} className="align-top">
+                                  <td className="py-1 pr-3">{e.value || '—'}</td>
+                                  <td className="py-1 pr-3">{e.reference || '—'}</td>
+                                  <td className="py-1 pr-3">{e.segment ?? '—'}</td>
+                                  <td className="py-1 pr-3">{e.confidence.toFixed(2)}</td>
+                                  <td className="py-1">{e.review_status}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </details>
+                    </>
+                  )}
                 </td>
                 <td className={td}>
-                  <Badge tone={confTone(g.min_conf)}>{g.min_conf.toFixed(2)}</Badge>
+                  {g.count === 1 ? (
+                    <>
+                      {g.entries[0].reference || '—'}
+                      {g.entries[0].segment != null && (
+                        <span className="text-slate-400"> · seg {g.entries[0].segment}</span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-slate-400">{g.count} sources</span>
+                  )}
+                </td>
+                <td className={td}>
+                  {g.count === 1 ? (
+                    <Badge tone={confTone(g.entries[0].confidence)}>{g.entries[0].confidence.toFixed(2)}</Badge>
+                  ) : (
+                    <Badge tone={confTone(g.min_conf)}>≥{g.min_conf.toFixed(2)}</Badge>
+                  )}
                 </td>
                 <td className={td}>{g.status}</td>
               </tr>
@@ -216,7 +294,10 @@ export default function RegulationDetailPage() {
             head={
               <>
                 <th className={th}>Parameter</th>
-                <th className={th}>Expression</th>
+                <th className={th}>Type</th>
+                <th className={th}>Structured</th>
+                <th className={th}>Constraint</th>
+                <th className={th}>Raw text</th>
                 <th className={th}>Conf.</th>
                 <th className={th}>Status</th>
               </>
@@ -225,11 +306,14 @@ export default function RegulationDetailPage() {
             {conditions.map((c, i) => (
               <tr key={i}>
                 <td className={td}>{c.parameter_name}</td>
+                <td className={td}>{c.condition_type}</td>
                 <td className={td}>
-                  {c.structured
-                    ? [c.operator, c.value_min, c.value_max, c.unit].filter(Boolean).join(' ') || c.raw_text
-                    : c.raw_text}
+                  <Badge tone={c.structured ? 'green' : 'amber'}>{c.structured ? 'yes' : 'no'}</Badge>
                 </td>
+                <td className={td}>
+                  {c.structured ? conditionConstraint(c) : <span className="text-slate-400">unstructured</span>}
+                </td>
+                <td className={td}>{c.raw_text || '—'}</td>
                 <td className={td}>
                   <Badge tone={confTone(c.confidence)}>{c.confidence.toFixed(2)}</Badge>
                 </td>
