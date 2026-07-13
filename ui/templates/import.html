@@ -55,13 +55,13 @@ extracts its parameters. Processing runs in the background worker.</p>
 <h2>Upload a document</h2>
 <p class="muted">Have the document already? Upload it directly instead of searching
 EUR-Lex. It's queued for the same pipeline and extracted identically — only the
-source differs. Accepted: PDF, DOCX, TXT, EPUB, XPS. If the file name contains a
+source differs. Accepted: PDF, Word (DOCX). If the file name contains a
 CELEX number (e.g. <code>CELEX_32014L0034_EN_TXT.pdf</code>) it's linked to that id.</p>
 
 <form class="filters" method="post" action="/import/upload" enctype="multipart/form-data">
   <div style="flex:1; min-width:280px;">
     <label>Document file<br>
-      <input type="file" name="file" accept=".pdf,.docx,.txt,.epub,.xps" required style="width:100%;">
+      <input type="file" name="file" accept=".pdf,.docx" required style="width:100%;">
     </label>
   </div>
   <button type="submit">Upload &amp; ingest</button>
