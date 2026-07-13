@@ -22,11 +22,11 @@ Source Adapters ──writes one row──▶ jobs table ──worker.py polls+c
                                                                               │
                           ┌───────────────────────────────────────────────────┤
                           ▼                                                     ▼
-                  Resolution Engine                                       Review UI (FastAPI+Jinja2)
+                  Resolution Engine                                       Review UI (React + FastAPI)
                   - relationship_resolver  (typed edges, recursive CTE)   - queue / field detail
                   - hs_mapper              (HS ↔ regulation)              - HS & applicability review
                   - wizard_matcher         (the Wizard query engine)      - relationship table
-                                                                          - POST /wizard/query
+                                                                          - POST /api/wizard/query
 ```
 
 The **jobs table is the only connection** between acquisition and processing — adapters
@@ -60,11 +60,27 @@ changes to agents.
 
 ## Quick start
 
+### Option A — everything in Docker (recommended)
+
+One command builds the React UI, starts Postgres, and runs the combined UI + API
+container. Migrations and reference-data seeding happen automatically on startup.
+
+```bash
+# (optional) put your OPENAI_API_KEY in .env first — needed only to ingest documents
+docker compose up --build
+```
+
+Then open **http://localhost:8000** — the React Review UI and the JSON API (at
+`/api`, docs at `/docs`) are served by the same container. The ingestion worker runs
+in the background by default (set `RUN_WORKER=false` to disable it).
+
+### Option B — local dev (hot-reload UI)
+
 Prerequisites: Docker (for Postgres) and Python 3.11+.
 
 ```bash
 # 1. Start Postgres (the only datastore)
-docker compose up -d
+docker compose up -d postgres
 
 # 2. Set up Python
 python -m venv .venv && . .venv/bin/activate      # Windows: .\.venv\Scripts\Activate.ps1
@@ -82,8 +98,9 @@ python -m scripts.enqueue 32014L0034               # by CELEX (acquired via the 
 #   python -c "from adapters.upload import UploadAdapter; print(UploadAdapter().fetch('path/to/directive.pdf').id)"
 python worker.py --once                            # process one batch and exit (or: python worker.py)
 
-# 5. Launch the Review UI + Wizard
-uvicorn ui.main:app --reload                       # http://127.0.0.1:8000/review
+# 5. Launch the API + React Review UI
+uvicorn ui.main:app --reload                       # JSON API → http://127.0.0.1:8000/docs
+cd frontend && npm install && npm run dev          # React UI → http://127.0.0.1:5173
 ```
 
 ### Pipeline modes (agentic by default)
@@ -102,13 +119,13 @@ set `LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY`.
 
 Programmatic (JSON):
 ```bash
-curl -X POST http://127.0.0.1:8000/wizard/query \
+curl -X POST http://127.0.0.1:8000/api/wizard/query \
   -H 'Content-Type: application/json' \
   -d '{"hs_code": "8501.10", "product_attributes": {"rated_voltage_vdc": 24}}'
 ```
-Or use the form at `GET /wizard`. The query logic lives in
+Or use the Wizard page in the React UI. The query logic lives in
 [engine/wizard_matcher.py](engine/wizard_matcher.py); the endpoint is in
-[ui/routes/wizard.py](ui/routes/wizard.py).
+[ui/api/wizard.py](ui/api/wizard.py).
 
 ---
 
@@ -196,7 +213,8 @@ agents/     the five pipeline agents
 engine/     resolution engine (relationships, HS mapping, wizard matcher)
 db/         SQLAlchemy models, enums, session, Alembic migrations
 schemas/    Pydantic v2 inter-agent contracts (the language seam)
-ui/         FastAPI + Jinja2 Review UI and the wizard endpoint
+ui/         FastAPI JSON API (backs the React frontend) + the wizard endpoint
+frontend/   React 18 + TypeScript + Vite SPA (the Review UI)
 scripts/    seed scripts (HS nomenclature, reference data)
 data/       seed JSON/CSV
 tests/      unit + integration tests (LLM mocked)

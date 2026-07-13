@@ -1,14 +1,13 @@
-"""GET /regulations — the data-browser index.
+"""GET /api/regulations — the data-browser index.
 
 Guards the correlated-subquery child counts (fields / conditions / relationships)
-that replaced the per-row N+1 COUNT queries: the rendered counts must equal the
-actual child rows, a regulation with no children must render 0 (a correlated
+that replaced the per-row N+1 COUNT queries: the returned counts must equal the
+actual child rows, a regulation with no children must report 0 (a correlated
 COUNT returns 0, not NULL/blank), and STUB regulations must stay hidden.
 """
 
 from __future__ import annotations
 
-import re
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -36,13 +35,9 @@ def _mk_reg(source_id: str, status: str = IngestionStatus.INGESTED.value):
         return reg.id
 
 
-def _row_counts(html_text: str, source_id: str):
-    """The (fields, conditions, relationships) cells of the row for source_id, or None."""
-    for row in re.findall(r"<tr>(.*?)</tr>", html_text, re.S):
-        if f">{source_id}</a>" in row:
-            cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)
-            return tuple(c.strip() for c in cells[-3:])  # last 3 cols = fields, conds, rels
-    return None
+def _row(rows: list[dict], source_id: str) -> dict | None:
+    """The row for source_id, or None if it isn't in the response."""
+    return next((r for r in rows if r["source_id"] == source_id), None)
 
 
 def test_index_counts_match_children_and_excludes_stubs(cleanup_regs):
@@ -66,15 +61,20 @@ def test_index_counts_match_children_and_excludes_stubs(cleanup_regs):
             relation_type=RelationType.RELATED.value, source=RelationSource.TEXT_EXTRACTED.value,
         ))
 
-    r = client.get("/regulations?per_page=200")
+    r = client.get("/api/regulations?per_page=200")
     assert r.status_code == 200
+    rows = r.json()["rows"]
 
     # counts equal the actual children (3 fields, 2 conditions, 1 relationship)
-    assert _row_counts(r.text, sid_a) == ("3", "2", "1")
-    # a regulation with no children shows 0 across the board, not a blank/missing cell
-    assert _row_counts(r.text, sid_b) == ("0", "0", "0")
+    row_a = _row(rows, sid_a)
+    assert row_a is not None
+    assert (row_a["fields"], row_a["conditions"], row_a["relationships"]) == (3, 2, 1)
+    # a regulation with no children shows 0 across the board, not a blank/missing value
+    row_b = _row(rows, sid_b)
+    assert row_b is not None
+    assert (row_b["fields"], row_b["conditions"], row_b["relationships"]) == (0, 0, 0)
     # STUBs are not listed
-    assert sid_stub not in r.text
+    assert _row(rows, sid_stub) is None
 
 
 def test_index_avoids_per_row_count_queries():
@@ -87,7 +87,7 @@ def test_index_avoids_per_row_count_queries():
 
     event.listen(engine, "before_cursor_execute", _rec)
     try:
-        r = client.get("/regulations?per_page=200")
+        r = client.get("/api/regulations?per_page=200")
     finally:
         event.remove(engine, "before_cursor_execute", _rec)
 

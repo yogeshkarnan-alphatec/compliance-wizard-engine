@@ -1,8 +1,7 @@
 """JSON API — /api/regulations (paginated list) and /api/regulations/{id} (detail).
 
-Mirrors ui/routes/regulations.py but returns JSON instead of rendering Jinja.
-Query logic is duplicated here on purpose so the existing HTML routes stay
-byte-for-byte untouched.
+Serves the React frontend's data-browser: regulation metadata plus grouped fields,
+conditions, relationships and HS mappings.
 """
 
 from __future__ import annotations

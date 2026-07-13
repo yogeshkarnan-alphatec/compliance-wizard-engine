@@ -20,5 +20,41 @@ services:
       timeout: 5s
       retries: 5
 
+  # One container running BOTH the React UI and the FastAPI backend. `uvicorn`
+  # serves the compiled SPA and the JSON API from a single process on :8000.
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: compliance_wizard_app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Uses DATABASE_URL from your .env if set (e.g. a Supabase URL) — compose
+      # auto-loads .env for ${...} substitution — otherwise falls back to the
+      # bundled Postgres service on the compose network.
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://compliance:compliance@postgres:5432/compliance_wizard}
+      # Migrate + seed on startup. Set false when DATABASE_URL is an already
+      # set-up external DB so the container never mutates its schema.
+      RUN_DB_INIT: ${RUN_DB_INIT:-true}
+      FILE_STORE_PATH: /app/file_store
+      # Secrets/tuning pulled from your shell or the project .env (compose
+      # auto-loads .env for ${...} substitution). OPENAI_API_KEY is only needed
+      # to actually ingest a document; the UI/API start fine without it.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      PIPELINE_MODE: ${PIPELINE_MODE:-agentic}
+      # Set RUN_WORKER=false to serve only the UI/API (no background ingestion).
+      RUN_WORKER: ${RUN_WORKER:-true}
+    ports:
+      - "${APP_HOST_PORT:-8000}:8000"
+    volumes:
+      # Persist uploaded/downloaded PDFs across container restarts.
+      - filestore:/app/file_store
+
 volumes:
   pgdata:
+  filestore:

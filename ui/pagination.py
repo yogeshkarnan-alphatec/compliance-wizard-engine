@@ -1,18 +1,15 @@
-"""Shared pagination helpers for the Review UI.
+"""Shared pagination helpers for the JSON API.
 
-A single ``Page`` dataclass carries the page math (offset, bounds, link window) so
-routes only compute the total once and templates stay dumb. ``page_url`` rebuilds the
-current URL with overridden ``page``/``per_page`` params while preserving every other
-query param (jurisdiction, confidence band, …) — registered as a Jinja global in deps.
+A single ``Page`` dataclass carries the page math (offset, bounds) so each endpoint
+computes the total once and serialises a consistent pagination block for the React
+frontend to render.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from urllib.parse import urlencode
 
 DEFAULT_PER_PAGE = 25
-PER_PAGE_OPTIONS = (25, 50, 100)
 _MAX_PER_PAGE = 200
 
 
@@ -57,19 +54,6 @@ class Page:
         """1-based index of the last row on this page."""
         return min(self.offset + self.per_page, self.total)
 
-    def page_window(self, radius: int = 2) -> list[int | None]:
-        """Page numbers to render as links: first, last, and a window around the
-        current page. ``None`` marks an elided gap (rendered as an ellipsis)."""
-        out: list[int | None] = []
-        last: int | None = None
-        for p in range(1, self.total_pages + 1):
-            if p == 1 or p == self.total_pages or abs(p - self.page) <= radius:
-                if last is not None and p - last > 1:
-                    out.append(None)
-                out.append(p)
-                last = p
-        return out
-
 
 def build_page(page: int, per_page: int, total: int) -> Page:
     """Clamp the requested page/per_page against ``total`` and return a ``Page``."""
@@ -77,16 +61,3 @@ def build_page(page: int, per_page: int, total: int) -> Page:
     total_pages = max(1, (total + per_page - 1) // per_page)
     page = max(1, min(page, total_pages))
     return Page(page=page, per_page=per_page, total=total)
-
-
-def page_url(request, **overrides) -> str:
-    """Current path with ``overrides`` merged into the existing query params.
-
-    Used from templates to build prev/next, numbered, and per-page links without
-    dropping active filters.
-    """
-    params = dict(request.query_params)
-    for key, value in overrides.items():
-        params[key] = value
-    query = urlencode(params)
-    return f"{request.url.path}?{query}" if query else request.url.path

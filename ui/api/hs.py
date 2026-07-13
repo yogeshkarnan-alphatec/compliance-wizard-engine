@@ -1,4 +1,4 @@
-"""JSON API — HS / applicability mapping review. Mirrors ui/routes/hs_review.py."""
+"""JSON API — HS / applicability mapping review for the React frontend."""
 
 from __future__ import annotations
 
