@@ -7,19 +7,7 @@ duplicated here; each node calls the same classes/functions the classic pipeline
 
 from __future__ import annotations
 
-from db.enums import RelationType
-from schemas.fetch import ApiSourcedRelationship, FetchEnrichmentOutput
 from agentic.context import PipelineState
-
-# EUR-Lex RDF predicate -> our typed relationship (see AGENTIC_REFACTOR_PLAN.md).
-_PREDICATE_TO_RELATION = {
-    "work_amends_work": RelationType.AMENDS,
-    "work_amended_by_work": RelationType.AMENDED_BY,
-    "work_repeals_work": RelationType.SUPERSEDES,
-    "work_repealed_by_work": RelationType.SUPERSEDED_BY,
-    "work_cites_work": RelationType.REFERENCES,
-    "work_related_to_work": RelationType.RELATED,
-}
 
 
 def _identity(state: PipelineState) -> tuple[str, str]:
@@ -90,46 +78,29 @@ def map_validate_node(state: PipelineState) -> dict:
 
 
 def enrich_node(state: PipelineState) -> dict:
-    """EUR-Lex RDF -> typed relationships + dates/OJ. Never fails the pipeline (skips)."""
+    """EUR-Lex RDF -> typed relationships + dates/OJ. Never fails the pipeline (skips).
+
+    Prefers the RDF `load` already fetched. Falls back to fetching it by CELEX when it
+    isn't there — `load` drops `rdf_bytes` whenever it served the document from a local
+    PDF, and a known CELEX is still enrichable in that case.
+    """
+    from engine.enrichment import enrich_from_celex, enrich_from_rdf
+
     job_id = state["job_id"]
-    sid, _ = _identity(state)
+    sid, jur = _identity(state)
     log = state.get("log", [])
-    empty = FetchEnrichmentOutput(job_id=job_id, regulation_source_id=sid, skipped=True)
 
-    celex, rdf = state.get("celex"), state.get("rdf_bytes")
-    if not celex or not rdf:
-        return {"fetch_output": empty, "log": log + ["enrich: skipped (no CELEX RDF)"]}
+    rdf = state.get("rdf_bytes")
+    if rdf:
+        fo, how = enrich_from_rdf(rdf, sid, job_id), "from loaded RDF"
+    else:
+        fo, how = enrich_from_celex(sid, jur, job_id), "by CELEX lookup"
 
-    try:
-        from eurlex import celex_from_uri, extract_metadata, extract_relationships
-
-        rels = extract_relationships(rdf)
-        meta = extract_metadata(rdf)
-        api_rels: list[ApiSourcedRelationship] = []
-        for predicate, uris in rels.items():
-            rtype = _PREDICATE_TO_RELATION.get(predicate)
-            if rtype is None:
-                continue
-            for uri in uris:
-                # CELEX-resolvable targets only. Non-legislative items (Commission staff
-                # working docs / COM proposals — SWD_*/COM_* URIs with no CELEX) are dropped
-                # rather than slugified into "MENTION:HTTP-..." junk stub nodes.
-                target = celex_from_uri(uri)
-                if target and target != sid:
-                    api_rels.append(ApiSourcedRelationship(
-                        target_source_id=target, relation_type=rtype, confidence=0.9))
-        fo = FetchEnrichmentOutput(
-            job_id=job_id, regulation_source_id=sid,
-            publication_date=meta.get("publication_date"),
-            entry_into_force_date=meta.get("entry_into_force_date"),
-            oj_reference=meta.get("oj_reference"),
-            api_sourced_relationships=api_rels, skipped=False,
-        )
-        return {"fetch_output": fo,
-                "log": log + [f"enrich: {len(api_rels)} typed relationship(s); "
-                              f"dates={'yes' if meta.get('publication_date') else 'no'}"]}
-    except Exception as exc:  # noqa: BLE001 — enrichment must never fail the pipeline
-        return {"fetch_output": empty, "log": log + [f"enrich: error ({exc}); skipped"]}
+    if fo.skipped:
+        return {"fetch_output": fo, "log": log + [f"enrich: skipped ({how} unavailable)"]}
+    return {"fetch_output": fo,
+            "log": log + [f"enrich ({how}): {len(fo.api_sourced_relationships)} typed "
+                          f"relationship(s); dates={'yes' if fo.publication_date else 'no'}"]}
 
 
 def persist_node(state: PipelineState) -> dict:
