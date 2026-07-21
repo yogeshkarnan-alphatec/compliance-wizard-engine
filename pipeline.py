@@ -6,7 +6,10 @@ read this file and see the entire per-document flow. No framework, no hidden
 control flow.
 
 Persistence is idempotent per regulation: re-running a job replaces that
-regulation's fields and conditions rather than duplicating them.
+regulation's fields and conditions rather than duplicating them. The Resolution
+Engine holds the same contract for its derived rows — text-extracted relationship
+edges and machine HS mappings are replaced, while api_sourced edges and any row a
+reviewer has acted on survive.
 """
 
 from __future__ import annotations

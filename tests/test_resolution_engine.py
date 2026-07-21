@@ -3,11 +3,12 @@
 import pytest
 from sqlalchemy import func, select
 
-from db.models import ApplicabilityCondition, Regulation, RegulationRelationship
+from db.models import ApplicabilityCondition, HsRegulationMap, Regulation, RegulationRelationship
 from db.session import session_scope
 from engine.hs_mapper import find_regulations_by_hs, map_regulation_hs_codes
 from engine.relationship_resolver import get_amendment_chain, normalize_identifier, resolve_relationships
 from engine.wizard_matcher import query
+from schemas.fetch import ApiSourcedRelationship
 from schemas.wizard import WizardQuery
 
 
@@ -51,6 +52,54 @@ def test_resolve_creates_stub_and_inverse_edges(cleanup_regs):
         assert out_edges == 1 and back_edges == 1
     # Chain query runs without error (references-only → empty amendment chain).
     assert get_amendment_chain(reg_id) == []
+
+
+def test_reingest_replaces_text_edges_but_keeps_api_edges(cleanup_regs):
+    """A re-ingest whose citation set changed must not leave the dropped edge behind —
+    in either direction — while api_sourced edges (Fetch may skip) survive untouched."""
+    cleanup_regs.extend(["TEST:REING", "39999L0002", "39999L0003", "39999R0004"])
+    reg_id = _make_reg("TEST:REING")
+    api_rel = ApiSourcedRelationship(
+        target_source_id="Regulation 9999/4/EU", relation_type="amends", confidence=0.9
+    )
+    resolve_relationships(reg_id, mentions=["Directive 9999/2/EU"], api_relationships=[api_rel])
+
+    # Second ingest: the document now cites 9999/3 instead of 9999/2, and Fetch skipped.
+    resolve_relationships(reg_id, mentions=["Directive 9999/3/EU"], api_relationships=[])
+
+    with session_scope() as s:
+        def edges(sid):
+            tgt = s.execute(select(Regulation).where(Regulation.source_id == sid)).scalar_one()
+            out = s.scalar(select(func.count()).select_from(RegulationRelationship).where(
+                RegulationRelationship.source_reg_id == reg_id,
+                RegulationRelationship.target_reg_id == tgt.id))
+            back = s.scalar(select(func.count()).select_from(RegulationRelationship).where(
+                RegulationRelationship.source_reg_id == tgt.id,
+                RegulationRelationship.target_reg_id == reg_id))
+            return out, back
+
+        assert edges("39999L0002") == (0, 0)  # dropped citation: edge AND its inverse gone
+        assert edges("39999L0003") == (1, 1)  # new citation resolved
+        assert edges("39999R0004") == (1, 1)  # api_sourced edge preserved across a skip
+
+
+def test_reingest_clears_machine_hs_but_keeps_reviewer_decisions(cleanup_regs):
+    cleanup_regs.append("TEST:HSREING")
+    reg_id = _make_reg("TEST:HSREING")
+    map_regulation_hs_codes(reg_id, ["8501.10"])  # exact → auto-approved
+    with session_scope() as s:
+        # A reviewer rejected a low-confidence guess from that first ingest.
+        s.add(HsRegulationMap(hs_code="850120", regulation_id=reg_id, confidence=0.3,
+                              match_type="fuzzy", review_status="rejected", reviewer_id="alice"))
+
+    map_regulation_hs_codes(reg_id, ["8501.20"])  # the document's HS set changed
+
+    with session_scope() as s:
+        rows = {r.hs_code: r for r in s.execute(
+            select(HsRegulationMap).where(HsRegulationMap.regulation_id == reg_id)).scalars().all()}
+    assert "850110" not in rows                        # stale machine mapping cleared
+    assert rows["850120"].review_status == "rejected"  # reviewer's call survives
+    assert rows["850120"].reviewer_id == "alice"
 
 
 def test_hs_mapping_exact_and_reverse(cleanup_regs):
