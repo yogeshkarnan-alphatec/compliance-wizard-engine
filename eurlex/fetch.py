@@ -101,6 +101,37 @@ def _extract_html_text(html_text):
     return parser.text or None
 
 
+def fetch_rdf(celex, language="ENG", session=None):
+    """Fetch the WORK-level RDF metadata graph for a CELEX number.
+
+    Fetched with no ``Accept`` header, which is what makes CELLAR return the metadata
+    graph rather than the legal text. This is the graph ``rdf.extract_relationships`` /
+    ``rdf.extract_metadata`` read, so callers that only want metadata can stop here
+    instead of paying for the expression + manifestation round-trips ``get_document``
+    goes on to make.
+
+    Args:
+        celex (str): CELEX number, e.g. ``"32016R0679"``.
+        language (str): ISO 639-3 language code, passed through to CELLAR.
+        session (requests.Session | None): Reused HTTP session, optional.
+
+    Returns:
+        bytes | None: The raw RDF/XML body, or None if CELLAR did not return 200.
+    """
+    http = session or requests
+    resp = http.get(
+        CELLAR_RESOURCE.format(celex=celex),
+        headers={},                      # no Accept header — returns RDF at WORK level
+        params={"language": language},
+        allow_redirects=True,
+        timeout=60,
+    )
+    if resp.status_code != 200:
+        print(f"  [{celex}] RDF fetch failed: HTTP {resp.status_code}")
+        return None
+    return resp.content
+
+
 def get_document(celex, language="ENG", session=None, expression_uri=None):
     """Fetch a EU legal document by CELEX number.
 
@@ -119,19 +150,11 @@ def get_document(celex, language="ENG", session=None, expression_uri=None):
 
     # Step 1: fetch RDF metadata graph to discover the expression URI (unless cached).
     if expression_uri is None:
-        rdf = http.get(
-            CELLAR_RESOURCE.format(celex=celex),
-            headers={},                      # no Accept header — returns RDF at WORK level
-            params={"language": language},
-            allow_redirects=True,
-            timeout=60,
-        )
-        if rdf.status_code != 200:
-            print(f"  [{celex}] RDF fetch failed: HTTP {rdf.status_code}")
+        rdf_bytes = fetch_rdf(celex, language=language, session=session)
+        if rdf_bytes is None:
             return None
-        rdf_bytes = rdf.content
 
-        expression_uri = find_expression_uri(rdf.text, language)
+        expression_uri = find_expression_uri(rdf_bytes.decode("utf-8", "replace"), language)
         if not expression_uri:
             print(f"  [{celex}] No .{language} expression URI found in RDF.")
             return None

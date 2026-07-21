@@ -74,7 +74,9 @@ def extract_relationships(rdf_bytes):
 # --- additions for the compliance pipeline ---------------------------------
 
 # CELEX ids look like 32014L0035 (sector digit + 4-digit year + descriptor + number).
-_CELEX_IN_URI = re.compile(r"(3\d{4}[A-Z]{1,2}\d{3,4})")
+_CELEX = r"3\d{4}[A-Z]{1,2}\d{3,4}"
+_CELEX_IN_URI = re.compile(f"({_CELEX})")
+_CELEX_EXACT = re.compile(_CELEX)
 
 # CDM predicate local-names that may carry dates / OJ reference. Names are
 # best-effort and should be confirmed against a real RDF sample; the function
@@ -88,6 +90,16 @@ def celex_from_uri(uri):
     """Best-effort: pull a CELEX id out of a CELLAR work/resource URI, else None."""
     m = _CELEX_IN_URI.search(uri or "")
     return m.group(1) if m else None
+
+
+def is_celex(value):
+    """True if the whole string is a CELEX id — not merely one that contains one.
+
+    Lets callers tell a CELLAR-resolvable identifier from the pipeline's other
+    source_id shapes (``UPLOAD:<uuid>``, ``MENTION:...``, national ids) before
+    spending a CELLAR round-trip on it.
+    """
+    return bool(_CELEX_EXACT.fullmatch((value or "").strip()))
 
 
 def extract_metadata(rdf_bytes):
