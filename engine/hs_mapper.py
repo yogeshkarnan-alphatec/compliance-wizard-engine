@@ -13,9 +13,10 @@ from __future__ import annotations
 import logging
 import re
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from db.enums import MatchType, ReviewStatus
 from db.models import HsNomenclature, HsRegulationMap
 from db.session import session_scope
 
@@ -27,8 +28,14 @@ def _digits(code: str) -> str:
 
 
 def map_regulation_hs_codes(regulation_id, hs_codes: list[str]) -> None:
-    """Resolve each of a regulation's HS codes and write hs_regulation_map rows."""
+    """Resolve each of a regulation's HS codes and write hs_regulation_map rows.
+
+    Idempotent per regulation: prior machine guesses are cleared first, so a re-ingest
+    whose HS set shrank stops surfacing the codes it dropped. This is the authoritative
+    re-resolve entry point — map_inferred_hs_codes runs after it and stays additive.
+    """
     with session_scope() as s:
+        _clear_machine_mappings(s, regulation_id)
         for raw in hs_codes:
             code = _digits(raw)
             if len(code) < 6:
@@ -80,6 +87,29 @@ def map_inferred_hs_codes(regulation_id, candidates: list[dict]) -> int:
             )
             written += 1
     return written
+
+
+def _clear_machine_mappings(s, regulation_id) -> None:
+    """Delete this regulation's untouched machine guesses before re-resolving.
+
+    Only rows the engine wrote and no reviewer has acted on: 'manual' rows and anything
+    human-approved or rejected stay: those are a reviewer's decision, and a rejected row
+    that we deleted would simply reappear as pending on the next ingest. This is the same
+    line _upsert draws by keeping review_status out of its update set.
+    """
+    n = s.execute(
+        delete(HsRegulationMap).where(
+            HsRegulationMap.regulation_id == regulation_id,
+            HsRegulationMap.reviewer_id.is_(None),
+            HsRegulationMap.match_type != MatchType.MANUAL.value,
+            HsRegulationMap.review_status.in_(
+                [ReviewStatus.PENDING.value, ReviewStatus.AUTO_APPROVED.value]
+            ),
+        )
+    ).rowcount
+    if n:
+        log.info("map_regulation_hs_codes: cleared %d stale machine mapping(s) for %s",
+                 n, regulation_id)
 
 
 def _upsert(s, hs_code, regulation_id, confidence, match_type, review_status) -> None:
