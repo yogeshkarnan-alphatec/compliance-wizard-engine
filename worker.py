@@ -16,7 +16,7 @@ import argparse
 import logging
 import time
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import select
@@ -24,6 +24,8 @@ from sqlalchemy import select
 from config import (
     WORKER_BATCH_SIZE,
     WORKER_HEARTBEAT_SECONDS,
+    WORKER_LEASE_SECONDS,
+    WORKER_MAX_ATTEMPTS,
     WORKER_POLL_INTERVAL_SECONDS,
 )
 from db.enums import JobStatus
@@ -54,6 +56,53 @@ def _claim_one() -> UUID | None:
         job.claimed_at = datetime.now(timezone.utc)
         job.attempts += 1
         return job.id  # committed on scope exit → lock released, row marked processing
+
+
+def reap_stale_jobs() -> int:
+    """Recover jobs orphaned by a crashed worker. Returns how many rows were touched.
+
+    A worker sets status=PROCESSING and claimed_at at claim time, then runs the
+    pipeline OUTSIDE any row lock. So if it crashes mid-run, the row is stranded in
+    PROCESSING forever — nothing else ever looks at claimed_at/attempts. This reaper
+    (run at startup) is that recovery: any PROCESSING row whose claimed_at is older
+    than the lease is assumed abandoned. If it still has attempts left it goes back to
+    QUEUED for another worker; once attempts are exhausted it is marked FAILED with a
+    JobError so it stops looping.
+
+    Safety for LIVE workers: only rows with a STALE claimed_at match, so a healthy
+    in-flight job (recent claim) is invisible here. FOR UPDATE SKIP LOCKED + the
+    status guard make concurrent reapers idempotent — whoever commits first flips the
+    row and the others' WHERE no longer matches. Best-effort: never raises."""
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=WORKER_LEASE_SECONDS)
+    touched = 0
+    try:
+        with session_scope() as s:
+            stale = (
+                s.execute(
+                    select(Job)
+                    .where(Job.status == JobStatus.PROCESSING.value)
+                    .where(Job.claimed_at < cutoff)
+                    .with_for_update(skip_locked=True)
+                )
+                .scalars()
+                .all()
+            )
+            for job in stale:
+                if job.attempts < WORKER_MAX_ATTEMPTS:
+                    job.status = JobStatus.QUEUED.value
+                    job.claimed_at = None  # so it isn't immediately re-reaped
+                    log.warning("reaper: requeued orphaned job %s (attempt %d)", job.id, job.attempts)
+                else:
+                    job.status = JobStatus.FAILED.value
+                    msg = f"orphaned in PROCESSING and exhausted retries after {job.attempts} attempt(s)"
+                    s.add(JobError(job_id=job.id, stage="reaper", error_message=msg, traceback=msg))
+                    log.error("reaper: failed orphaned job %s (attempts exhausted)", job.id)
+                touched += 1
+    except Exception:  # noqa: BLE001 — recovery must never crash worker startup
+        log.exception("reaper: could not reap stale PROCESSING jobs")
+    if touched:
+        log.info("reaper: recovered %d orphaned job(s)", touched)
+    return touched
 
 
 def _record_failure(job_id: UUID, tb: str) -> None:
@@ -130,6 +179,10 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=WORKER_BATCH_SIZE)
     parser.add_argument("--once", action="store_true", help="Process one batch and exit")
     args = parser.parse_args()
+
+    # Recover jobs abandoned by a previously-crashed worker before taking new work,
+    # so a restart is what heals a stranded PROCESSING row.
+    reap_stale_jobs()
 
     if args.once:
         n = run_batch(args.batch_size)

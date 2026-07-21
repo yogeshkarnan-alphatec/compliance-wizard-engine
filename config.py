@@ -98,6 +98,16 @@ WORKER_BATCH_SIZE: int = int(_env("WORKER_BATCH_SIZE", "1"))
 # How often the idle worker logs a heartbeat line so operators can see it is still
 # alive (and how many jobs it has processed) even when the queue is empty.
 WORKER_HEARTBEAT_SECONDS: int = int(_env("WORKER_HEARTBEAT_SECONDS", "60"))
+# Lease window for the orphaned-job reaper: a PROCESSING row whose claimed_at is
+# older than this is assumed abandoned by a crashed worker and is requeued (or
+# failed). Must be comfortably larger than the worst-case pipeline runtime — the
+# lease is set once at claim time and never renewed mid-run, so too small a value
+# would let the reaper steal a slow-but-healthy job. Default: 30 minutes.
+WORKER_LEASE_SECONDS: int = int(_env("WORKER_LEASE_SECONDS", "1800"))
+# How many times an orphaned job is requeued before the reaper gives up and marks
+# it FAILED. Bounds retries so a job that reliably crashes its worker can't loop
+# forever. attempts is incremented on every claim (worker._claim_one).
+WORKER_MAX_ATTEMPTS: int = int(_env("WORKER_MAX_ATTEMPTS", "3"))
 
 # --- Logging ---------------------------------------------------------------
 # Applied process-wide by logging_config.configure_logging() at each entrypoint

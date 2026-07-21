@@ -10,10 +10,12 @@ outcome*, which previously escaped _process -> run_batch -> the while-True loop.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pipeline
 import worker
+from config import WORKER_LEASE_SECONDS
 from db.enums import JobStatus
 from db.models import Job, JobError
 from db.session import session_scope
@@ -26,14 +28,19 @@ def _raising(exc_type, msg):
     return _f
 
 
-def _make_job(cleanup_jobs, status=JobStatus.PROCESSING.value):
+def _make_job(cleanup_jobs, status=JobStatus.PROCESSING.value, *, claimed_at=None, attempts=0):
     with session_scope() as s:
-        job = Job(status=status, jurisdiction="EU")
+        job = Job(status=status, jurisdiction="EU", claimed_at=claimed_at, attempts=attempts)
         s.add(job)
         s.flush()
         jid = job.id
     cleanup_jobs.append(jid)
     return jid
+
+
+# A claimed_at safely older than the lease → the job looks orphaned to the reaper.
+def _stale_ts():
+    return datetime.now(timezone.utc) - timedelta(seconds=WORKER_LEASE_SECONDS + 60)
 
 
 def test_process_marks_failed_and_records_error(monkeypatch, cleanup_jobs):
@@ -78,3 +85,60 @@ def test_success_recording_db_error_does_not_kill_worker(monkeypatch, caplog):
         worker._process(uuid4())  # must NOT raise
 
     assert any("could not record DONE status" in r.getMessage() for r in caplog.records)
+
+
+# --------------------------------------------------------------------------- reaper
+
+
+def test_reaper_requeues_stale_job_with_attempts_left(cleanup_jobs):
+    jid = _make_job(cleanup_jobs, claimed_at=_stale_ts(), attempts=1)
+
+    worker.reap_stale_jobs()
+
+    with session_scope() as s:
+        job = s.get(Job, jid)
+        assert job.status == JobStatus.QUEUED.value
+        assert job.claimed_at is None  # cleared so it isn't re-reaped immediately
+
+
+def test_reaper_fails_stale_job_when_attempts_exhausted(cleanup_jobs):
+    jid = _make_job(cleanup_jobs, claimed_at=_stale_ts(), attempts=worker.WORKER_MAX_ATTEMPTS)
+
+    worker.reap_stale_jobs()
+
+    with session_scope() as s:
+        assert s.get(Job, jid).status == JobStatus.FAILED.value
+        errs = s.execute(select(JobError).where(JobError.job_id == jid)).scalars().all()
+    assert len(errs) == 1 and errs[0].stage == "reaper"
+
+
+def test_reaper_leaves_fresh_processing_job_untouched(cleanup_jobs):
+    # A healthy worker's in-flight job: claimed just now → must NOT be reaped.
+    jid = _make_job(cleanup_jobs, claimed_at=datetime.now(timezone.utc), attempts=1)
+
+    worker.reap_stale_jobs()
+
+    with session_scope() as s:
+        assert s.get(Job, jid).status == JobStatus.PROCESSING.value
+
+
+def test_reaper_ignores_non_processing_jobs(cleanup_jobs):
+    qid = _make_job(cleanup_jobs, status=JobStatus.QUEUED.value, claimed_at=_stale_ts())
+    did = _make_job(cleanup_jobs, status=JobStatus.DONE.value, claimed_at=_stale_ts())
+
+    worker.reap_stale_jobs()
+
+    with session_scope() as s:
+        assert s.get(Job, qid).status == JobStatus.QUEUED.value
+        assert s.get(Job, did).status == JobStatus.DONE.value
+
+
+def test_reaper_is_idempotent(cleanup_jobs):
+    jid = _make_job(cleanup_jobs, claimed_at=_stale_ts(), attempts=worker.WORKER_MAX_ATTEMPTS)
+
+    worker.reap_stale_jobs()
+    worker.reap_stale_jobs()  # second run must not add a second JobError
+
+    with session_scope() as s:
+        errs = s.execute(select(JobError).where(JobError.job_id == jid)).scalars().all()
+    assert len(errs) == 1
