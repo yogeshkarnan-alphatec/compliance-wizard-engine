@@ -110,8 +110,10 @@ Planner delegates to an LLM **Extractor** (structured output) and a **Critic** (
 bounded re-extract), with deterministic nodes for read / map / validate / enrich / persist —
 see [agentic/graph.py](agentic/graph.py) and [AGENTIC_REFACTOR_PLAN.md](AGENTIC_REFACTOR_PLAN.md).
 EU directives are acquired by CELEX through the vendored EUR-Lex engine ([eurlex/](eurlex/)),
-which also supplies typed relationships + publication/OJ metadata. Set `PIPELINE_MODE=classic`
-for the original fixed sequence. Watch a flow without persisting:
+which also supplies typed relationships + publication/OJ metadata. Both modes enrich through
+the same core ([engine/enrichment.py](engine/enrichment.py)): the agentic `enrich` node parses
+the RDF graph `load` already fetched, while the classic Fetch agent looks it up by CELEX.
+Set `PIPELINE_MODE=classic` for the original fixed sequence. Watch a flow without persisting:
 `python -m scripts.trace_document <pdf> --celex <id> --agentic`. Optional LangSmith tracing:
 set `LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY`.
 

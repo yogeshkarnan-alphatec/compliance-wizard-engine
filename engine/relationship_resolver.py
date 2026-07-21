@@ -16,7 +16,7 @@ import logging
 import re
 from uuid import UUID
 
-from sqlalchemy import select, text
+from sqlalchemy import delete, or_, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from db.enums import IngestionStatus, RELATION_INVERSE, RelationSource, RelationType
@@ -63,6 +63,12 @@ def normalize_identifier(mention: str) -> str:
 
 # --- main entry point ------------------------------------------------------
 def resolve_relationships(regulation_id: UUID, mentions: list[str], api_relationships=None) -> None:
+    """Resolve this regulation's mentions + API relationships into typed edges.
+
+    Idempotent per regulation: prior text-extracted edges are cleared first (same
+    transaction as the re-insert), so dropping a citation from the document drops its
+    edge rather than leaving one the wizard keeps surfacing.
+    """
     api_relationships = api_relationships or []
     with session_scope() as s:
         source = s.get(Regulation, regulation_id)
@@ -70,6 +76,8 @@ def resolve_relationships(regulation_id: UUID, mentions: list[str], api_relation
             log.warning("resolve_relationships: source regulation %s not found", regulation_id)
             return
         source_sid = source.source_id
+
+        _clear_text_extracted_edges(s, regulation_id)
 
         # Text-extracted mentions → 'references' edges (we can't infer amend/supersede
         # from a bare citation; the Fetch agent's API data carries the precise type).
@@ -91,6 +99,32 @@ def resolve_relationships(regulation_id: UUID, mentions: list[str], api_relation
             target = _get_or_create_stub(s, target_sid)
             _write_edge(s, regulation_id, target.id, rtype, reference="api",
                         confidence=conf, source=RelationSource.API_SOURCED)
+
+
+def _clear_text_extracted_edges(s, regulation_id: UUID) -> None:
+    """Drop this regulation's prior text_extracted edges so a re-ingest replaces them.
+
+    Both directions go: _write_edge maintains an inverse row on the target side, so
+    clearing only the outgoing edges would leave the inverse orphaned. The edge table
+    has no per-edge provenance beyond `source`, so an inverse another regulation's own
+    ingest also asserts is dropped here too — it comes back when that one re-ingests.
+
+    api_sourced edges are deliberately left alone: they carry the precise relation type
+    (amends/supersedes) that no amount of re-reading the text can recover, and Fetch is
+    allowed to skip (offline, API down), which would otherwise delete them for good.
+    """
+    n = s.execute(
+        delete(RegulationRelationship).where(
+            RegulationRelationship.source == RelationSource.TEXT_EXTRACTED.value,
+            or_(
+                RegulationRelationship.source_reg_id == regulation_id,
+                RegulationRelationship.target_reg_id == regulation_id,
+            ),
+        )
+    ).rowcount
+    if n:
+        log.info("resolve_relationships: cleared %d prior text_extracted edge(s) for %s",
+                 n, regulation_id)
 
 
 def _get_or_create_stub(s, source_id: str) -> Regulation:

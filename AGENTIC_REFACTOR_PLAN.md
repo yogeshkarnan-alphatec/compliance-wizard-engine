@@ -88,7 +88,10 @@ OJ reference. Predicate → `RelationType` map (drives `api_sourced_relationship
 | `work_cites_work` | `references` |
 | `work_related_to_work` | `related` |
 
-This retired the broken `FetchAgent._query` (it expected JSON; live EUR-Lex returns XHTML).
+This retired the broken `FetchAgent._query` (it expected JSON; live EUR-Lex returns XHTML)
+for the agentic path only — classic kept calling it and so silently enriched nothing. Both
+modes now share `engine/enrichment.py` (`enrich_from_rdf` / `enrich_from_celex`), and
+`FetchAgent` is a thin adapter over it.
 
 ---
 

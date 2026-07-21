@@ -29,7 +29,6 @@ class FetchEnrichmentOutput(BaseModel):
 
     job_id: UUID
     regulation_source_id: str
-    amendment_history: list[str] = Field(default_factory=list)
     publication_date: date | None = None
     entry_into_force_date: date | None = None
     oj_reference: str | None = None

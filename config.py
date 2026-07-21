@@ -83,7 +83,8 @@ DATABASE_URL: str = _env(
 FILE_STORE_PATH: Path = Path(_env("FILE_STORE_PATH", "./file_store"))
 
 # --- EUR-Lex / CELLAR ------------------------------------------------------
-EURLEX_API_BASE: str = _env("EURLEX_API_BASE", "https://eur-lex.europa.eu/")
+# Document + metadata retrieval is the vendored eurlex/ client, which hardcodes the
+# CELLAR resource URI; there is no base-URL knob for it.
 # Public CELLAR SPARQL endpoint (no API key) used by the Import search to look up
 # directives by title. Override only if the endpoint host changes.
 EURLEX_SPARQL_ENDPOINT: str = _env(
