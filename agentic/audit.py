@@ -16,9 +16,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 
 from db.models import LlmAuditLog
 from db.session import session_scope
-from llm_client import FAILED_RESPONSE_PREFIX
-
-_MAX = 100_000  # cap stored prompt/response length
+from llm_client import FAILED_RESPONSE_PREFIX, _clip_for_audit
 
 
 def _content_to_text(content) -> str:
@@ -64,7 +62,7 @@ class LlmAuditHandler(BaseCallbackHandler):
             with session_scope() as s:
                 s.add(LlmAuditLog(
                     job_id=None, agent=self.agent, model=model,
-                    prompt=prompt[:_MAX], response=str(text)[:_MAX],
+                    prompt=_clip_for_audit(prompt), response=_clip_for_audit(str(text)),
                     prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
                     latency_ms=latency_ms,
                 ))
@@ -88,7 +86,7 @@ class LlmAuditHandler(BaseCallbackHandler):
             with session_scope() as s:
                 s.add(LlmAuditLog(
                     job_id=None, agent=self.agent, model=None,
-                    prompt=prompt[:_MAX], response=response[:_MAX],
+                    prompt=_clip_for_audit(prompt), response=_clip_for_audit(response),
                     prompt_tokens=None, completion_tokens=None,
                     latency_ms=latency_ms,
                 ))
