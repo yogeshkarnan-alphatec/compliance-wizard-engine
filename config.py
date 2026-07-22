@@ -45,6 +45,21 @@ OPENAI_API_KEY: str | None = _env("OPENAI_API_KEY")  # not required at import; c
 # _build_prompt keeps annexes/articles and drops recitals first when it must truncate.
 EXTRACT_MAX_CHARS: int = int(_env("EXTRACT_MAX_CHARS", "70000"))
 
+# --- LLM audit log retention ------------------------------------------------
+# llm_audit_log stores one full prompt+response blob per LLM call and is the
+# fastest-growing table; nothing else ever deletes from it. These knobs keep it
+# bounded (see worker.prune_llm_audit_log and llm_client._clip_for_audit).
+# Per-blob cap: prompt/response are truncated to this many characters BEFORE the row
+# is written, so a single pathological call can't bloat the table (and its
+# backups/vacuum). Applied identically on both audit seams (classic + agentic).
+LLM_AUDIT_MAX_CHARS: int = int(_env("LLM_AUDIT_MAX_CHARS", "100000"))
+# Time-based retention: rows older than this are pruned by the worker. 0 disables
+# pruning (keep forever). The ix_llm_audit_log_created_at index keeps the delete cheap.
+LLM_AUDIT_RETENTION_DAYS: int = int(_env("LLM_AUDIT_RETENTION_DAYS", "90"))
+# How often the running worker re-prunes (it also prunes once at startup). Long by
+# design — retention is coarse and the delete is O(expired rows). Default: 1 hour.
+LLM_AUDIT_PRUNE_INTERVAL_SECONDS: int = int(_env("LLM_AUDIT_PRUNE_INTERVAL_SECONDS", "3600"))
+
 # --- Agentic runtime (OpenAI Agents SDK) -----------------------------------
 # LLM_PROVIDER selects the model backend for the agents. "openai" (default) uses
 # OPENAI_MODEL; "anthropic" uses ANTHROPIC_MODEL via langchain-anthropic (needs the

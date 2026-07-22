@@ -22,6 +22,8 @@ from uuid import UUID
 from sqlalchemy import select
 
 from config import (
+    LLM_AUDIT_PRUNE_INTERVAL_SECONDS,
+    LLM_AUDIT_RETENTION_DAYS,
     WORKER_BATCH_SIZE,
     WORKER_HEARTBEAT_SECONDS,
     WORKER_LEASE_SECONDS,
@@ -29,7 +31,7 @@ from config import (
     WORKER_POLL_INTERVAL_SECONDS,
 )
 from db.enums import JobStatus
-from db.models import Job, JobError
+from db.models import Job, JobError, LlmAuditLog
 from db.session import session_scope
 from logging_config import configure_logging
 
@@ -103,6 +105,45 @@ def reap_stale_jobs() -> int:
     if touched:
         log.info("reaper: recovered %d orphaned job(s)", touched)
     return touched
+
+
+def prune_llm_audit_log() -> int:
+    """Delete llm_audit_log rows older than the retention window. Returns rows deleted.
+
+    llm_audit_log is the fastest-growing table (one full prompt+response blob per LLM
+    call) and nothing else ever deletes from it, so without retention it grows unbounded
+    and dominates DB size + vacuum cost. This enforces a time-based policy: rows older
+    than LLM_AUDIT_RETENTION_DAYS are removed. Set that to 0 to disable (keep forever).
+
+    The ix_llm_audit_log_created_at index makes the WHERE created_at < cutoff a cheap
+    range scan rather than a full-table sweep. Runs at worker startup and then every
+    LLM_AUDIT_PRUNE_INTERVAL_SECONDS. Best-effort: never raises, so a pruning failure
+    can't stop the worker from taking jobs.
+
+    (A native time-range PARTITION would let expired data be dropped by detaching whole
+    partitions instead of DELETE+vacuum; that's a heavier migration and is deferred —
+    this delete-based policy is the pragmatic bound for the existing single table.)
+    """
+    if LLM_AUDIT_RETENTION_DAYS <= 0:
+        return 0
+    cutoff = datetime.now(timezone.utc) - timedelta(days=LLM_AUDIT_RETENTION_DAYS)
+    deleted = 0
+    try:
+        with session_scope() as s:
+            deleted = (
+                s.query(LlmAuditLog)
+                .filter(LlmAuditLog.created_at < cutoff)
+                .delete(synchronize_session=False)
+            )
+    except Exception:  # noqa: BLE001 — retention must never crash or block the worker
+        log.exception("prune: could not prune llm_audit_log")
+        return 0
+    if deleted:
+        log.info(
+            "prune: deleted %d llm_audit_log row(s) older than %d day(s)",
+            deleted, LLM_AUDIT_RETENTION_DAYS,
+        )
+    return deleted
 
 
 def _record_failure(job_id: UUID, tb: str) -> None:
@@ -183,6 +224,9 @@ def main() -> None:
     # Recover jobs abandoned by a previously-crashed worker before taking new work,
     # so a restart is what heals a stranded PROCESSING row.
     reap_stale_jobs()
+    # Bound the audit log on startup too, so even a worker that only ever runs --once
+    # (e.g. a cron-driven batch) still enforces retention.
+    prune_llm_audit_log()
 
     if args.once:
         n = run_batch(args.batch_size)
@@ -199,6 +243,7 @@ def main() -> None:
     # clock adjustments, which is what we want for an interval.
     processed_total = 0
     last_heartbeat = time.monotonic()
+    last_prune = time.monotonic()  # startup prune above already ran
     while True:
         n = run_batch(args.batch_size)
         processed_total += n
@@ -206,6 +251,11 @@ def main() -> None:
         if now - last_heartbeat >= WORKER_HEARTBEAT_SECONDS:
             log.info("worker heartbeat: alive, %d job(s) processed since start", processed_total)
             last_heartbeat = now
+        # Re-prune periodically so a long-lived worker keeps the audit log bounded
+        # without a restart. time.monotonic() is immune to clock adjustments.
+        if now - last_prune >= LLM_AUDIT_PRUNE_INTERVAL_SECONDS:
+            prune_llm_audit_log()
+            last_prune = now
         if n == 0:
             time.sleep(WORKER_POLL_INTERVAL_SECONDS)
 

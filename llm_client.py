@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass
 from uuid import UUID
 
-from config import OPENAI_API_KEY, OPENAI_MAX_TOKENS, OPENAI_MODEL
+from config import LLM_AUDIT_MAX_CHARS, OPENAI_API_KEY, OPENAI_MAX_TOKENS, OPENAI_MODEL
 from db.models import LlmAuditLog
 from db.session import session_scope
 
@@ -34,6 +34,19 @@ _client = None
 # dedicated error column, so this single constant is how failures are recorded and how
 # queries/UI can reliably tell a failed call from a successful one.
 FAILED_RESPONSE_PREFIX = "[LLM_CALL_FAILED]"
+
+
+def _clip_for_audit(value: str | None) -> str | None:
+    """Cap a prompt/response blob at LLM_AUDIT_MAX_CHARS before it is persisted.
+
+    llm_audit_log holds one full-text blob per call and is the fastest-growing table, so
+    a single pathological prompt/response must not be stored unbounded. Both audit seams
+    — this classic path and the agentic LlmAuditHandler — clip through here so the cap is
+    enforced identically. None (a missing prompt/response) passes through untouched.
+    """
+    if value is None:
+        return None
+    return value[:LLM_AUDIT_MAX_CHARS]
 
 
 def _get_client():
@@ -130,8 +143,8 @@ def complete(
                         job_id=job_id,
                         agent=agent,
                         model=model,
-                        prompt=logged_prompt,
-                        response=response_text,
+                        prompt=_clip_for_audit(logged_prompt),
+                        response=_clip_for_audit(response_text),
                         prompt_tokens=prompt_tokens,
                         completion_tokens=completion_tokens,
                         latency_ms=latency_ms,

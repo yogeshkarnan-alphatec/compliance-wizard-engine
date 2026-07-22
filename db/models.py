@@ -325,6 +325,11 @@ class JobError(Base):
 # ---------------------------------------------------------------------------
 class LlmAuditLog(Base):
     __tablename__ = "llm_audit_log"
+    # Index created_at so the retention prune (DELETE ... WHERE created_at < cutoff)
+    # is a cheap range scan instead of a full-table sweep — this is the fastest-growing
+    # table. job_id is deliberately NOT indexed: operators don't query per-job yet, so
+    # the write cost isn't justified until they do.
+    __table_args__ = (Index("ix_llm_audit_log_created_at", "created_at"),)
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     job_id: Mapped[uuid.UUID | None] = mapped_column(

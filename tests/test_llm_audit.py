@@ -6,11 +6,13 @@ the classic seam (llm_client.complete) and the agentic langchain handler
 (LlmAuditHandler). LLM calls are mocked; assertions run against the real Postgres.
 """
 
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
 
 import llm_client
+import worker
 from agentic.audit import LlmAuditHandler
 from db.models import LlmAuditLog
 from db.session import session_scope
@@ -99,3 +101,67 @@ def test_agentic_error_does_not_leak_starts():
 
     handler.on_llm_error(RuntimeError("boom"), run_id=run_id)
     assert handler._starts == {}, "on_llm_error must pop the pending start entry"
+
+
+# --------------------------------------------------------------------------- truncation
+
+
+def test_clip_for_audit_caps_and_passes_none():
+    """The shared blob cap truncates over-long text and leaves None untouched."""
+    assert llm_client._clip_for_audit(None) is None
+    long = "x" * (llm_client.LLM_AUDIT_MAX_CHARS + 500)
+    clipped = llm_client._clip_for_audit(long)
+    assert len(clipped) == llm_client.LLM_AUDIT_MAX_CHARS
+
+
+def test_classic_call_truncates_stored_blobs(monkeypatch, cleanup_audit):
+    """A huge prompt/response must be clipped to LLM_AUDIT_MAX_CHARS before storage,
+    so one pathological call can't bloat the fastest-growing table."""
+    tag = f"test-clip-{uuid4().hex[:8]}"
+    cleanup_audit.append(tag)
+    monkeypatch.setattr(llm_client, "LLM_AUDIT_MAX_CHARS", 20)
+    big_response = "R" * 1000
+    monkeypatch.setattr(llm_client, "_call_provider", lambda **k: (big_response, 1, 1))
+
+    llm_client.complete("P" * 1000, agent=tag)
+
+    rows = _rows_for(tag)
+    assert len(rows) == 1
+    assert len(rows[0].prompt) == 20
+    assert len(rows[0].response) == 20
+
+
+# --------------------------------------------------------------------------- retention
+
+
+def test_prune_deletes_only_expired_rows(monkeypatch, cleanup_audit):
+    """prune_llm_audit_log removes rows older than the retention window and keeps fresh
+    ones. Retention is disabled (0) by returning early."""
+    tag = f"test-prune-{uuid4().hex[:8]}"
+    cleanup_audit.append(tag)
+    monkeypatch.setattr(worker, "LLM_AUDIT_RETENTION_DAYS", 30)
+    now = datetime.now(timezone.utc)
+    with session_scope() as s:
+        s.add(LlmAuditLog(agent=tag, prompt="old", response="old",
+                          created_at=now - timedelta(days=45)))
+        s.add(LlmAuditLog(agent=tag, prompt="fresh", response="fresh",
+                          created_at=now - timedelta(days=5)))
+
+    # prune is global (any expired row), so assert on THIS test's tagged rows rather
+    # than the return count — the shared DB may hold other expired rows.
+    worker.prune_llm_audit_log()
+
+    rows = _rows_for(tag)
+    assert [r.prompt for r in rows] == ["fresh"]
+
+
+def test_prune_disabled_keeps_everything(monkeypatch, cleanup_audit):
+    tag = f"test-prune-off-{uuid4().hex[:8]}"
+    cleanup_audit.append(tag)
+    monkeypatch.setattr(worker, "LLM_AUDIT_RETENTION_DAYS", 0)
+    with session_scope() as s:
+        s.add(LlmAuditLog(agent=tag, prompt="ancient", response="ancient",
+                          created_at=datetime.now(timezone.utc) - timedelta(days=999)))
+
+    assert worker.prune_llm_audit_log() == 0
+    assert len(_rows_for(tag)) == 1
