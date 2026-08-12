@@ -52,8 +52,6 @@ EXTRACT_MAX_CHARS: int = int(_env("EXTRACT_MAX_CHARS", "70000"))
 LLM_PROVIDER: str = (_env("LLM_PROVIDER", "openai") or "openai").lower()
 ANTHROPIC_API_KEY: str | None = _env("ANTHROPIC_API_KEY")
 ANTHROPIC_MODEL: str = _env("ANTHROPIC_MODEL", "claude-sonnet-4-6")
-# PIPELINE_MODE: "agentic" (Planner delegates) or "classic" (the fixed sequence).
-PIPELINE_MODE: str = (_env("PIPELINE_MODE", "agentic") or "agentic").lower()
 # Hard cap on Planner agent-loop turns (guards against runaway delegation).
 AGENT_MAX_TURNS: int = int(_env("AGENT_MAX_TURNS", "20"))
 

@@ -17,9 +17,8 @@ import logging
 from uuid import uuid4
 
 from agents.extract_agent import ExtractAgent
-from schemas.common import ExtractedField
 from schemas.extra_audit import capture_dropped_keys
-from schemas.extract import ConformityRoute, ExtractionResult, RawApplicabilityCondition
+from schemas.extract import ConformityRoute, ExtractionResult
 
 _DROP_LOGGER = "compliance.extract.dropped_keys"
 

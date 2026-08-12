@@ -1,8 +1,8 @@
 """Failed LLM calls must be audited (SCRUM-18).
 
 A 429/timeout/5xx used to propagate out of the LLM seam before any llm_audit_log row
-was written, so failures were invisible. These tests pin the fix in both pipelines:
-the classic seam (llm_client.complete) and the agentic langchain handler
+was written, so failures were invisible. These tests pin the fix at both LLM seams:
+llm_client.complete and the agentic langchain handler
 (LlmAuditHandler). LLM calls are mocked; assertions run against the real Postgres.
 """
 

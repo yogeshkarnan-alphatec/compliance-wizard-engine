@@ -95,7 +95,7 @@ def build_graph():
 
 
 def run_agentic_pipeline(job_id: UUID) -> dict:
-    """Entry point used by pipeline.run_pipeline when PIPELINE_MODE=agentic.
+    """Entry point used by pipeline.run_pipeline.
 
     Builds the initial state from the job row and runs the graph to completion.
     Raises on unrecoverable errors (the worker marks the job failed).

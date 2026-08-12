@@ -1,6 +1,6 @@
 """LangChain callback that persists every agentic LLM call to llm_audit_log.
 
-The classic pipeline audits via llm_client; the agentic pipeline calls models through
+llm_client audits its own calls directly; the agentic graph reaches models through
 langchain, so we attach this handler in model.py to keep the spec's "every prompt +
 response persisted" guarantee. Successful calls are recorded on ``on_llm_end`` and
 FAILED calls on ``on_llm_error`` — both are persisted so failures are never invisible.
@@ -77,7 +77,7 @@ class LlmAuditHandler(BaseCallbackHandler):
         Without this, a failed agentic call fired ``on_llm_error`` (never
         ``on_llm_end``), so it was never written to llm_audit_log AND its entry
         leaked in ``self._starts`` forever. We now pop the pending entry (fixing the
-        leak) and write a failure row, mirroring the classic pipeline's marker. This
+        leak) and write a failure row, mirroring llm_client's failure marker. This
         callback also covers chat-model errors — langchain routes both through
         ``on_llm_error``. Best-effort: never raises.
         """

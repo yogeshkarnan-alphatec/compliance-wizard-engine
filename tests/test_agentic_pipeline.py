@@ -92,12 +92,10 @@ def test_agentic_graph_persists_and_reextracts(patch_model, cleanup_regs):
     assert n_fields >= 1                            # the extracted scope_description persisted
 
 
-def test_run_pipeline_dispatches_to_agentic(monkeypatch):
+def test_run_pipeline_delegates_to_the_graph(monkeypatch):
     import agentic.graph
-    import config
     import pipeline
 
-    monkeypatch.setattr(config, "PIPELINE_MODE", "agentic")
     captured = {}
     monkeypatch.setattr(agentic.graph, "run_agentic_pipeline",
                         lambda jid: captured.setdefault("job_id", jid))

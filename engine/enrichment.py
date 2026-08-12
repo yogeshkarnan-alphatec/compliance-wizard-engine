@@ -5,12 +5,12 @@ Resolution Engine consumes: publication / entry-into-force dates, OJ reference, 
 typed api_sourced relationships (which resolve_relationships trusts over text-extracted
 mentions, since the RDF states the precise relation type a bare citation cannot).
 
-Two entry points, because the two pipeline modes arrive with different things in hand:
+Two entry points, because callers arrive with different things in hand:
 
   * ``enrich_from_rdf``   — pure, no I/O. The agentic ``load`` node already fetched the
     RDF to find the document text, so it enriches for free from the bytes it holds.
-  * ``enrich_from_celex`` — fetches the graph first, then delegates. The classic path
-    reads a local PDF and has no RDF, so it must pay for the round-trip.
+  * ``enrich_from_celex`` — fetches the graph first, then delegates. A document read from
+    a local PDF has no RDF, so it must pay for the round-trip.
 
 Hard requirement inherited from the old Fetch agent: enrichment must NEVER fail the
 pipeline. Every error path returns ``skipped=True`` and logs a warning.
