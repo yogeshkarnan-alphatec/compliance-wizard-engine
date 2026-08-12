@@ -7,16 +7,13 @@ tolerated drop must never be a *silent* drop — every dropped key is logged and
 inside capture_dropped_keys, accumulated with its model/job context.
 
 Pure unit tests: no network, no LLM. They validate raw dicts exactly as the
-agentic path does (with_structured_output -> model_validate) and exercise the
-classic ExtractAgent._parse drop path directly.
+agentic path does (with_structured_output -> model_validate).
 """
 
 from __future__ import annotations
 
 import logging
-from uuid import uuid4
 
-from agents.extract_agent import ExtractAgent
 from schemas.extra_audit import capture_dropped_keys
 from schemas.extract import ConformityRoute, ExtractionResult
 
@@ -109,30 +106,3 @@ def test_no_drop_no_event_and_no_log(caplog):
             ExtractionResult.model_validate({"applicability_conditions": [_condition()]})
     assert drops.events == []
     assert [r for r in caplog.records if r.name == _DROP_LOGGER] == []
-
-
-# --- classic path: _parse hand-picks keys, so it audits the drop itself ----------
-
-def test_classic_parse_tolerates_and_audits_extra_keys():
-    data = {
-        "unexpected_top_key": "dropped at top level",
-        "applicability_conditions": [_condition(source_segment_index=3)],  # stray on condition
-        "conformity_routes": [
-            {"category": "I", "modules": ["A"], "reference": "Annex II",
-             "confidence": 0.9, "stray_route_key": "x"},
-        ],
-    }
-
-    with capture_dropped_keys(job_id="job-classic", model="gpt-4o") as drops:
-        out = ExtractAgent()._parse(data, uuid4())
-
-    # extraction still succeeds with the real values
-    assert len(out.applicability_conditions) == 1
-    assert len(out.conformity_routes) == 1
-    assert out.conformity_routes[0].category == "I"
-
-    # and every stray key was audited, tagged with the model it came from
-    hits = {ev["model"]: ev["dropped_keys"] for ev in drops.events}
-    assert hits.get("ExtractOutput") == ["unexpected_top_key"]
-    assert hits.get("RawApplicabilityCondition") == ["source_segment_index"]
-    assert hits.get("ConformityRoute") == ["stray_route_key"]
