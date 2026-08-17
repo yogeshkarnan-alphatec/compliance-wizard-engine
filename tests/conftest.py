@@ -21,14 +21,8 @@ from db.session import engine, session_scope
 from scripts.seed_hs_nomenclature import DEFAULT_CSV, seed as seed_hs
 from scripts.seed_reference_data import seed_certification_bodies, seed_product_attributes
 
-# The unit suite exercises the CLASSIC pipeline (llm_client is mocked). Pin it so the
-# agentic default (which calls langchain chat_model, not llm_client) never makes real
-# API calls here; the agentic path has its own mocked tests (test_agentic_pipeline.py).
-config.PIPELINE_MODE = "classic"
-
-# HS inference makes a live LLM call from _resolve (outside the classic llm_client mock
-# and the agentic chat_model mock). Disable it globally; the dedicated inference tests
-# mock llm_client and re-enable it explicitly.
+# HS inference makes a live LLM call from _resolve (outside the mocked model seams).
+# Disable it globally; the dedicated inference tests mock llm_client and re-enable it.
 config.HS_INFERENCE_ENABLED = False
 
 
@@ -53,6 +47,42 @@ def mock_llm(monkeypatch):
             text = json.dumps(payload)
 
         monkeypatch.setattr(llm_client, "complete", lambda *a, **k: _Resp())
+
+    return _set
+
+
+@pytest.fixture
+def mock_chat_model(monkeypatch):
+    """Patch the agentic Extractor/Critic seam (agentic.specialists.chat_model).
+
+    Call mock_chat_model(extraction) with the ExtractionResult the Extractor should
+    return; pass critic_seq=[CriticDecision(...), ...] to script the Critic across
+    re-extract loops (default: a single ACCEPT). Mirrors the real langchain
+    `chat_model().with_structured_output(Schema).invoke()` seam without a network call.
+    """
+
+    def _set(extraction, critic_seq=None):
+        from agentic.specialists import CriticDecision
+        from schemas.extract import ExtractionResult
+
+        seq = list(critic_seq or [])
+
+        class _Structured:
+            def __init__(self, schema):
+                self._schema = schema
+
+            def invoke(self, _messages):
+                if self._schema is ExtractionResult:
+                    return extraction
+                if self._schema is CriticDecision:
+                    return seq.pop(0) if seq else CriticDecision(decision="ACCEPT")
+                raise AssertionError(f"unexpected structured-output schema: {self._schema}")
+
+        class _FakeModel:
+            def with_structured_output(self, schema, **_kw):
+                return _Structured(schema)
+
+        monkeypatch.setattr("agentic.specialists.chat_model", lambda *a, **k: _FakeModel())
 
     return _set
 

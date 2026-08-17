@@ -103,19 +103,18 @@ uvicorn ui.main:app --reload                       # JSON API → http://127.0.0
 cd frontend && npm install && npm run dev          # React UI → http://127.0.0.1:5173
 ```
 
-### Pipeline modes (agentic by default)
+### Ingestion pipeline
 
-Ingestion runs as a **LangGraph multi-agent flow** (`PIPELINE_MODE=agentic`, the default): a
-Planner delegates to an LLM **Extractor** (structured output) and a **Critic** (faithfulness +
-bounded re-extract), with deterministic nodes for read / map / validate / enrich / persist —
-see [agentic/graph.py](agentic/graph.py) and [AGENTIC_REFACTOR_PLAN.md](AGENTIC_REFACTOR_PLAN.md).
+Ingestion runs as a **LangGraph multi-agent flow**: a Planner delegates to an LLM
+**Extractor** (structured output) and a **Critic** (faithfulness + bounded re-extract),
+with deterministic nodes for read / map / validate / enrich / persist — see
+[agentic/graph.py](agentic/graph.py) and [AGENTIC_REFACTOR_PLAN.md](AGENTIC_REFACTOR_PLAN.md).
 EU directives are acquired by CELEX through the vendored EUR-Lex engine ([eurlex/](eurlex/)),
-which also supplies typed relationships + publication/OJ metadata. Both modes enrich through
-the same core ([engine/enrichment.py](engine/enrichment.py)): the agentic `enrich` node parses
-the RDF graph `load` already fetched, while the classic Fetch agent looks it up by CELEX.
-Set `PIPELINE_MODE=classic` for the original fixed sequence. Watch a flow without persisting:
-`python -m scripts.trace_document <pdf> --celex <id> --agentic`. Optional LangSmith tracing:
-set `LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY`.
+which also supplies typed relationships + publication/OJ metadata via the shared core
+([engine/enrichment.py](engine/enrichment.py)): the `enrich` node parses the RDF graph
+`load` already fetched, or looks it up by CELEX when only a PDF was read. Watch a flow
+without persisting: `python -m scripts.trace_document <pdf> --celex <id>`. Optional
+LangSmith tracing: set `LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY`.
 
 ### Querying the Wizard
 
@@ -156,7 +155,6 @@ All env vars and thresholds live in one place: [config.py](config.py). See
 | `DATABASE_URL` | local Postgres | psycopg3 connection URL |
 | `OPENAI_API_KEY` | — | required for the Extract agent (not for migrations/tests) |
 | `OPENAI_MODEL` | `gpt-4o` | provider model |
-| `PIPELINE_MODE` | `agentic` | `agentic` (LangGraph) or `classic` (fixed sequence) |
 | `LLM_PROVIDER` | `openai` | `openai` or `anthropic` (Claude via `langchain-anthropic`) |
 | `AGENT_MAX_TURNS` | `20` | planner loop cap in agentic mode |
 | `LANGSMITH_TRACING` / `LANGSMITH_API_KEY` | off | optional LangGraph tracing to LangSmith |

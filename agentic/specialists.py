@@ -5,7 +5,7 @@ with_structured_output — this is what makes the confidence-as-string silent-dr
 bug impossible). Critic: judges whether each extracted value is supported by its
 cited source segment, and routes ACCEPT / REEXTRACT / ROUTE_TO_HUMAN.
 
-Both reuse the classic agents' prompt + deterministic validation so nothing is
+Both reuse the agents' prompt + deterministic validation so nothing is
 duplicated: the Extractor borrows ExtractAgent's taxonomy prompt; the Critic runs
 on top of ValidationAgent's flags (produced by the map_validate node).
 """

@@ -1,28 +1,18 @@
-"""Agent 2 — Extract Agent.
+"""Agent 2 — Extract Agent (prompt + taxonomy).
 
-LLM-driven. Reads the segmented document and extracts the taxonomy as raw values,
-each with provenance (reference, confidence, source segment). Also extracts cited
-regulation identifiers (→ Resolution Engine) and machine-evaluable applicability
-conditions (→ Compliance Wizard).
-
-All LLM access goes through llm_client.complete, which persists the exact prompt
-and raw response to llm_audit_log. The response is requested as a JSON object and
-parsed defensively — a missing/odd field degrades to None/[] rather than crashing
-the pipeline.
+Holds the extraction prompt: the fixed compliance taxonomy, the controlled
+parameter vocabulary, and the priority-based segment selection that keeps a large
+document within the model's per-request budget. The agentic Extractor node
+(agentic/specialists.py) builds this prompt and calls the model with a structured
+output schema; ExtractAgent itself no longer makes LLM calls or parses responses.
 """
 
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from uuid import UUID
 
-import llm_client
 from config import EXTRACT_MAX_CHARS
 from db.enums import AssessmentType, ProductionType
-from schemas.common import ExtractedField
-from schemas.extra_audit import audit_unknown_keys, capture_dropped_keys
-from schemas.extract import ConformityRoute, ExtractOutput, RawApplicabilityCondition
 from schemas.read import ReadOutput
 
 _SYSTEM = (
@@ -108,16 +98,6 @@ class ExtractAgent:
         self._vocab_cache = "\n".join(lines)
         return self._vocab_cache
 
-    def run(self, read_output: ReadOutput, job_id: UUID | None = None) -> ExtractOutput:
-        job_id = job_id or read_output.job_id
-        prompt = self._build_prompt(read_output)
-        resp = llm_client.complete(prompt, agent=self.name, job_id=job_id, json_mode=True)
-        data = self._loads(resp.text)
-        # _parse hand-picks known keys, so unknown ones are dropped here rather than by
-        # Pydantic. Bind the job/model context so those drops are audited, not silent.
-        with capture_dropped_keys(job_id=job_id, model=getattr(resp, "model", None), phase="extract"):
-            return self._parse(data, job_id)
-
     # --- prompt ------------------------------------------------------------
     def _build_prompt(self, read_output: ReadOutput) -> str:
         # Select segments by PRIORITY so that when a document exceeds the budget, the
@@ -194,95 +174,3 @@ class ExtractAgent:
             + f"\nDocument metadata hints: {json.dumps(hints, default=str)}"
         )
         return "\n".join(lines)
-
-    # --- parsing -----------------------------------------------------------
-    @staticmethod
-    def _loads(text: str) -> dict:
-        try:
-            data = json.loads(text)
-            return data if isinstance(data, dict) else {}
-        except (json.JSONDecodeError, TypeError):
-            return {}
-
-    @staticmethod
-    def _field(obj: object) -> ExtractedField | None:
-        if not isinstance(obj, dict):
-            return None
-        audit_unknown_keys(ExtractedField, obj)
-        if obj.get("value") in (None, ""):
-            return None
-        try:
-            return ExtractedField(
-                value=str(obj["value"]),
-                reference=str(obj.get("reference", "")),
-                confidence=float(obj.get("confidence", 0.0)),
-                source_segment_index=int(obj.get("source_segment_index", 0)),
-            )
-        except (ValueError, TypeError):
-            return None
-
-    @classmethod
-    def _fields(cls, items: object) -> list[ExtractedField]:
-        if not isinstance(items, list):
-            return []
-        return [f for f in (cls._field(i) for i in items) if f is not None]
-
-    def _parse(self, data: dict, job_id: UUID) -> ExtractOutput:
-        kwargs: dict = {"job_id": job_id}
-        audit_unknown_keys(ExtractOutput, data)  # top-level keys outside the taxonomy
-        summary = data.get("summary")
-        kwargs["summary"] = str(summary).strip() if isinstance(summary, str) and summary.strip() else None
-        for key in _SCALAR_FIELDS:
-            kwargs[key] = self._field(data.get(key))
-        for key in _ARRAY_FIELDS:
-            kwargs[key] = self._fields(data.get(key))
-
-        mentions = data.get("regulation_mentions", [])
-        kwargs["regulation_mentions"] = [str(m) for m in mentions if isinstance(mentions, list) and m]
-
-        conds = []
-        for c in data.get("applicability_conditions", []) or []:
-            if not isinstance(c, dict):
-                continue
-            audit_unknown_keys(RawApplicabilityCondition, c)
-            try:
-                conds.append(
-                    RawApplicabilityCondition(
-                        parameter_name=str(c.get("parameter_name", "")),
-                        operator=str(c.get("operator", "")),
-                        value=str(c.get("value", "")),
-                        unit=(str(c["unit"]) if c.get("unit") else None),
-                        value_type=(str(c["value_type"]) if c.get("value_type") else None),
-                        condition_type=str(c.get("condition_type", "inclusion")),
-                        reference=str(c.get("reference", "")),
-                        confidence=float(c.get("confidence", 0.0)),
-                        raw_text=str(c.get("raw_text", c.get("value", ""))),
-                    )
-                )
-            except (ValueError, TypeError):
-                continue
-        kwargs["applicability_conditions"] = conds
-
-        routes = []
-        for r in data.get("conformity_routes", []) or []:
-            if not isinstance(r, dict):
-                continue
-            audit_unknown_keys(ConformityRoute, r)
-            mods = r.get("modules", [])
-            try:
-                routes.append(
-                    ConformityRoute(
-                        category=str(r.get("category", "")),
-                        modules=[str(m) for m in mods if m] if isinstance(mods, list) else [],
-                        condition=(str(r["condition"]) if r.get("condition") else None),
-                        reference=str(r.get("reference", "")),
-                        confidence=float(r.get("confidence", 0.0)),
-                        source_segment_index=int(r.get("source_segment_index", 0)),
-                    )
-                )
-            except (ValueError, TypeError):
-                continue
-        kwargs["conformity_routes"] = routes
-
-        kwargs["extracted_at"] = datetime.now(timezone.utc)
-        return ExtractOutput(**kwargs)

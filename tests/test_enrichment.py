@@ -11,9 +11,7 @@ from uuid import uuid4
 import pytest
 
 import eurlex
-from agents.fetch_agent import FetchAgent
 from engine.enrichment import enrich_from_celex, enrich_from_rdf
-from schemas.validation import ValidationOutput
 
 SOURCE_ID = "32014L0035"
 
@@ -88,16 +86,3 @@ def test_enrich_from_celex_swallows_fetch_errors(monkeypatch):
 
     monkeypatch.setattr(eurlex, "fetch_rdf", boom)
     assert enrich_from_celex(SOURCE_ID, "EU", uuid4()).skipped is True  # never fails the pipeline
-
-
-def test_fetch_agent_delegates_to_the_shared_core(monkeypatch):
-    """The classic pipeline's adapter must produce the same output as the agentic node."""
-    monkeypatch.setattr(eurlex, "fetch_rdf", lambda *a, **k: RDF_SAMPLE)
-    v = ValidationOutput(job_id=uuid4(), regulation_source_id=SOURCE_ID,
-                         jurisdiction="EU", review_status="auto-approved")
-
-    classic = FetchAgent().run(v)
-    agentic = enrich_from_rdf(RDF_SAMPLE, SOURCE_ID, v.job_id)
-
-    assert classic.skipped is False
-    assert classic.model_dump() == agentic.model_dump()

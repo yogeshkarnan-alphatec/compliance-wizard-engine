@@ -14,11 +14,9 @@ import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from sqlalchemy import select
-
 from config import FILE_STORE_PATH
 from db.enums import JobStatus
-from db.models import Job, Regulation
+from db.models import Job
 from db.session import session_scope
 
 _SAFE = re.compile(r"[^A-Za-z0-9._-]+")
@@ -42,21 +40,6 @@ class SourceAdapter(ABC):
         dest = FILE_STORE_PATH / f"{uuid.uuid4().hex[:8]}_{safe}"
         dest.write_bytes(content)
         return dest
-
-    def _already_ingested(self, source_id: str | None) -> bool:
-        """Dedup check: skip if a regulation or queued/processed job exists for this id."""
-        if not source_id:
-            return False
-        with session_scope() as s:
-            reg = s.execute(
-                select(Regulation.id).where(Regulation.source_id == source_id)
-            ).first()
-            if reg:
-                return True
-            job = s.execute(
-                select(Job.id).where(Job.source_id == source_id)
-            ).first()
-            return job is not None
 
     def _register_job(
         self,

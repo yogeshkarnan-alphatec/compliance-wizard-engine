@@ -1,8 +1,12 @@
 # Agentic Pipeline — As-Built
 
-> **Status: IMPLEMENTED** (2026-06-15). The ingestion pipeline now runs as a LangGraph
-> multi-agent flow. The classic fixed sequence is retained as a fallback. `pytest` → 25
-> passing (23 classic + 2 agentic); `ruff` clean.
+> **Status: IMPLEMENTED** (2026-06-15). The ingestion pipeline runs as a LangGraph
+> multi-agent flow.
+>
+> **Update (2026-08-12):** the classic fixed sequence has been **removed** — ingestion is
+> agentic-only. `PIPELINE_MODE`, `_run_classic_pipeline`, and the standalone `FetchAgent`
+> no longer exist; `pipeline.py` is the graph entry + shared `_persist`/`_resolve`. The
+> "classic" references below are retained as historical context.
 >
 > **As-built decisions**
 > | Topic | Choice |
@@ -34,8 +38,7 @@ python worker.py --once                    # processes the queue via the LangGra
 uvicorn ui.main:app --reload               # review at /review, query at /wizard
 ```
 
-- Force the old path with `PIPELINE_MODE=classic`. Watch a flow without persisting:
-  `python -m scripts.trace_document <pdf> --celex <id> --agentic`.
+- Watch a flow without persisting: `python -m scripts.trace_document <pdf> --celex <id>`.
 - Enable tracing: set `LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY` in `.env`.
 
 ---

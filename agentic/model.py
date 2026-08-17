@@ -3,7 +3,7 @@
 Returns a LangChain chat model. OpenAI (``OPENAI_MODEL``, default ``gpt-4o``) is the
 default backend; set ``LLM_PROVIDER=anthropic`` to use Claude via langchain-anthropic
 (needs the ``anthropic`` extra + ``ANTHROPIC_API_KEY``). Mirrors the single-seam
-philosophy of ``llm_client.py`` for the classic pipeline.
+philosophy of ``llm_client.py``.
 """
 
 from __future__ import annotations

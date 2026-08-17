@@ -46,7 +46,6 @@ services:
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
       LLM_PROVIDER: ${LLM_PROVIDER:-openai}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      PIPELINE_MODE: ${PIPELINE_MODE:-agentic}
       # Set RUN_WORKER=false to serve only the UI/API (no background ingestion).
       RUN_WORKER: ${RUN_WORKER:-true}
     ports:

@@ -2,7 +2,7 @@
 
 These do the non-LLM work: acquire + segment the document, normalize + validate,
 enrich relationships/metadata from the EUR-Lex RDF, and persist. No logic is
-duplicated here; each node calls the same classes/functions the classic pipeline uses.
+duplicated here; each node calls the same agent classes and engine functions directly.
 """
 
 from __future__ import annotations
